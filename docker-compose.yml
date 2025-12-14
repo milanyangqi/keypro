@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  # MongoDB数据库服务
+  mongodb:
+    image: mongo:6.0
+    container_name: keypro-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongodb-init.js:/docker-entrypoint-initdb.d/mongodb-init.js:ro
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=rootpassword
+      - MONGO_INITDB_DATABASE=keypro_trade
+    restart: unless-stopped
+    networks:
+      - keypro-network
+
+  # 后端服务
+  backend:
+    build:
+      context: ./backend
+    container_name: keypro-backend
+    ports:
+      - "3001:3001"
+    depends_on:
+      - mongodb
+    environment:
+      - PORT=3001
+      - NODE_ENV=production
+      - MONGO_URI=mongodb://root:rootpassword@mongodb:27017/keypro_trade?authSource=admin
+      - JWT_SECRET=keypro_trade_jwt_secret_key_2024
+      - JWT_EXPIRES_IN=7d
+      - UPLOAD_PATH=./uploads
+      - MAX_FILE_SIZE=5242880
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=admin123
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/public:/app/public
+    restart: unless-stopped
+    networks:
+      - keypro-network
+
+  # 前端服务
+  frontend:
+    build:
+      context: ./frontend
+    container_name: keypro-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - keypro-network
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  keypro-network:
+    driver: bridge
