@@ -35,16 +35,16 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
       onClick: () => navigate('/dashboard')
     },
     {
-      key: '2',
-      icon: <WhatsAppOutlined />,
-      label: 'WhatsApp号码管理',
-      onClick: () => navigate('/dashboard/whatsapp-number-management')
-    },
-    {
       key: '6',
       icon: <FormatPainterOutlined />,
       label: 'WhatsApp号码格式化',
       onClick: () => navigate('/dashboard/whatsapp-number-formatter')
+    },
+    {
+      key: '2',
+      icon: <WhatsAppOutlined />,
+      label: 'WhatsApp号码管理',
+      onClick: () => navigate('/dashboard/whatsapp-number-management')
     },
     {
       key: '3',
@@ -56,8 +56,20 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
     {
       key: '4',
       icon: <ClockCircleOutlined />,
-      label: '全球各地时间',
+      label: '美国各地时间',
       onClick: () => navigate('/dashboard/global-time')
+    },
+    {
+      key: '7',
+      icon: <ClockCircleOutlined />,
+      label: '全球各地时间',
+      onClick: () => navigate('/dashboard/global-world-time')
+    },
+    {
+      key: '8',
+      icon: <DatabaseOutlined />,
+      label: '产品目录制作1',
+      onClick: () => navigate('/dashboard/product-catalog-creation-1')
     },
     {
       key: '5',

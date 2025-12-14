@@ -9,6 +9,8 @@ import Dashboard from './pages/Dashboard';
 import WhatsAppNumberManagement from './pages/WhatsAppNumberManagement';
 import WhatsAppNumberFormatter from './pages/WhatsAppNumberFormatter';
 import GlobalTime from './pages/GlobalTime';
+import GlobalWorldTime from './pages/GlobalWorldTime';
+import ProductCatalogCreation1 from './pages/ProductCatalogCreation1';
 import UserManagement from './pages/UserManagement';
 import NotFound from './pages/NotFound';
 
@@ -79,6 +81,8 @@ const App: React.FC = () => {
           <Route path="whatsapp-number-management" element={<WhatsAppNumberManagement />} />
           <Route path="whatsapp-number-formatter" element={<WhatsAppNumberFormatter />} />
           <Route path="global-time" element={<GlobalTime />} />
+          <Route path="global-world-time" element={<GlobalWorldTime />} />
+          <Route path="product-catalog-creation-1" element={<ProductCatalogCreation1 />} />
           <Route path="user-management" element={<UserManagement />} />
           </Route>
 
