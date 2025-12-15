@@ -50,7 +50,7 @@ services:
       context: ./frontend
     container_name: keypro-frontend
     ports:
-      - "80:80"
+      - "3008:80"
     depends_on:
       - backend
     restart: unless-stopped

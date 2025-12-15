@@ -62,7 +62,7 @@ docker-compose up -d
 ```
 
 #### 2. 访问系统
-打开浏览器访问：http://localhost:80
+打开浏览器访问：http://localhost:3008
 
 ## 初始账号
 - 管理员账号：admin

@@ -50,8 +50,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
       key: '3',
       icon: <DatabaseOutlined />,
       label: 'WhatsApp号码采集',
-      disabled: true,
-      description: '后续开发'
+      onClick: () => navigate('/dashboard/whatsapp-number-collection')
     },
     {
       key: '4',
