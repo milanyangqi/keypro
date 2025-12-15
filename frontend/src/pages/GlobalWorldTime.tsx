@@ -152,71 +152,148 @@ const GlobalWorldTime: React.FC = () => {
   const [filteredCities, setFilteredCities] = useState<CityData[]>(cities);
   const [searchText, setSearchText] = useState('');
   const [regionFilter, setRegionFilter] = useState('all');
-  const [currentTime, setCurrentTime] = useState(dayjs());
+  const [, setCurrentTime] = useState(dayjs());
 
   // 主要城市实时时间显示 - 48个城市，包含国家信息
   const majorCities = [
     // 亚洲 (12个)
-    { name: '北京', country: '中国', timezone: 'Asia/Shanghai', timeDiff: 0 },
-    { name: '东京', country: '日本', timezone: 'Asia/Tokyo', timeDiff: 1 },
-    { name: '首尔', country: '韩国', timezone: 'Asia/Seoul', timeDiff: 1 },
-    { name: '新加坡', country: '新加坡', timezone: 'Asia/Singapore', timeDiff: 0 },
-    { name: '香港', country: '中国', timezone: 'Asia/Hong_Kong', timeDiff: 0 },
-    { name: '孟买', country: '印度', timezone: 'Asia/Kolkata', timeDiff: -2.5 },
-    { name: '曼谷', country: '泰国', timezone: 'Asia/Bangkok', timeDiff: -1 },
-    { name: '吉隆坡', country: '马来西亚', timezone: 'Asia/Kuala_Lumpur', timeDiff: 0 },
-    { name: '雅加达', country: '印度尼西亚', timezone: 'Asia/Jakarta', timeDiff: -1 },
-    { name: '迪拜', country: '阿联酋', timezone: 'Asia/Dubai', timeDiff: -4 },
-    { name: '新德里', country: '印度', timezone: 'Asia/Kolkata', timeDiff: -2.5 },
-    { name: '伊斯兰堡', country: '巴基斯坦', timezone: 'Asia/Karachi', timeDiff: -3 },
+    { name: '北京', country: '中国', timezone: 'CST', timeDiff: 0 },
+    { name: '东京', country: '日本', timezone: 'JST', timeDiff: 1 },
+    { name: '首尔', country: '韩国', timezone: 'KST', timeDiff: 1 },
+    { name: '新加坡', country: '新加坡', timezone: 'SGT', timeDiff: 0 },
+    { name: '香港', country: '中国', timezone: 'HKT', timeDiff: 0 },
+    { name: '孟买', country: '印度', timezone: 'IST', timeDiff: -2.5 },
+    { name: '曼谷', country: '泰国', timezone: 'ICT', timeDiff: -1 },
+    { name: '吉隆坡', country: '马来西亚', timezone: 'MYT', timeDiff: 0 },
+    { name: '雅加达', country: '印度尼西亚', timezone: 'WIB', timeDiff: -1 },
+    { name: '迪拜', country: '阿联酋', timezone: 'GST', timeDiff: -4 },
+    { name: '新德里', country: '印度', timezone: 'IST', timeDiff: -2.5 },
+    { name: '伊斯兰堡', country: '巴基斯坦', timezone: 'PKT', timeDiff: -3 },
     
     // 欧洲 (12个)
-    { name: '伦敦', country: '英国', timezone: 'Europe/London', timeDiff: -8 },
-    { name: '巴黎', country: '法国', timezone: 'Europe/Paris', timeDiff: -7 },
-    { name: '柏林', country: '德国', timezone: 'Europe/Berlin', timeDiff: -7 },
-    { name: '莫斯科', country: '俄罗斯', timezone: 'Europe/Moscow', timeDiff: -5 },
-    { name: '罗马', country: '意大利', timezone: 'Europe/Rome', timeDiff: -7 },
-    { name: '马德里', country: '西班牙', timezone: 'Europe/Madrid', timeDiff: -7 },
-    { name: '阿姆斯特丹', country: '荷兰', timezone: 'Europe/Amsterdam', timeDiff: -7 },
-    { name: '维也纳', country: '奥地利', timezone: 'Europe/Vienna', timeDiff: -7 },
-    { name: '苏黎世', country: '瑞士', timezone: 'Europe/Zurich', timeDiff: -7 },
-    { name: '斯德哥尔摩', country: '瑞典', timezone: 'Europe/Stockholm', timeDiff: -7 },
-    { name: '赫尔辛基', country: '芬兰', timezone: 'Europe/Helsinki', timeDiff: -6 },
-    { name: '华沙', country: '波兰', timezone: 'Europe/Warsaw', timeDiff: -7 },
+    { name: '伦敦', country: '英国', timezone: 'GMT', timeDiff: -8 },
+    { name: '巴黎', country: '法国', timezone: 'CET', timeDiff: -7 },
+    { name: '柏林', country: '德国', timezone: 'CET', timeDiff: -7 },
+    { name: '莫斯科', country: '俄罗斯', timezone: 'MSK', timeDiff: -5 },
+    { name: '罗马', country: '意大利', timezone: 'CET', timeDiff: -7 },
+    { name: '马德里', country: '西班牙', timezone: 'CET', timeDiff: -7 },
+    { name: '阿姆斯特丹', country: '荷兰', timezone: 'CET', timeDiff: -7 },
+    { name: '维也纳', country: '奥地利', timezone: 'CET', timeDiff: -7 },
+    { name: '苏黎世', country: '瑞士', timezone: 'CET', timeDiff: -7 },
+    { name: '斯德哥尔摩', country: '瑞典', timezone: 'CET', timeDiff: -7 },
+    { name: '赫尔辛基', country: '芬兰', timezone: 'EET', timeDiff: -6 },
+    { name: '华沙', country: '波兰', timezone: 'CET', timeDiff: -7 },
     
     // 美洲 (12个)
-    { name: '纽约', country: '美国', timezone: 'America/New_York', timeDiff: -13 },
-    { name: '洛杉矶', country: '美国', timezone: 'America/Los_Angeles', timeDiff: -16 },
-    { name: '多伦多', country: '加拿大', timezone: 'America/Toronto', timeDiff: -13 },
-    { name: '芝加哥', country: '美国', timezone: 'America/Chicago', timeDiff: -14 },
-    { name: '旧金山', country: '美国', timezone: 'America/San_Francisco', timeDiff: -16 },
-    { name: '迈阿密', country: '美国', timezone: 'America/Miami', timeDiff: -13 },
-    { name: '华盛顿', country: '美国', timezone: 'America/Washington', timeDiff: -13 },
-    { name: '圣保罗', country: '巴西', timezone: 'America/Sao_Paulo', timeDiff: -11 },
-    { name: '墨西哥城', country: '墨西哥', timezone: 'America/Mexico_City', timeDiff: -14 },
-    { name: '布宜诺斯艾利斯', country: '阿根廷', timezone: 'America/Argentina/Buenos_Aires', timeDiff: -11 },
-    { name: '圣地亚哥', country: '智利', timezone: 'America/Santiago', timeDiff: -12 },
-    { name: '温哥华', country: '加拿大', timezone: 'America/Vancouver', timeDiff: -16 },
+    { name: '纽约', country: '美国', timezone: 'EST', timeDiff: -13 },
+    { name: '洛杉矶', country: '美国', timezone: 'PST', timeDiff: -16 },
+    { name: '多伦多', country: '加拿大', timezone: 'EST', timeDiff: -13 },
+    { name: '芝加哥', country: '美国', timezone: 'CST', timeDiff: -14 },
+    { name: '旧金山', country: '美国', timezone: 'PST', timeDiff: -16 },
+    { name: '迈阿密', country: '美国', timezone: 'EST', timeDiff: -13 },
+    { name: '华盛顿', country: '美国', timezone: 'EST', timeDiff: -13 },
+    { name: '圣保罗', country: '巴西', timezone: 'BRT', timeDiff: -11 },
+    { name: '墨西哥城', country: '墨西哥', timezone: 'CST', timeDiff: -14 },
+    { name: '布宜诺斯艾利斯', country: '阿根廷', timezone: 'ART', timeDiff: -11 },
+    { name: '圣地亚哥', country: '智利', timezone: 'CLT', timeDiff: -12 },
+    { name: '温哥华', country: '加拿大', timezone: 'PST', timeDiff: -16 },
     
     // 大洋洲 & 非洲 (12个)
-    { name: '悉尼', country: '澳大利亚', timezone: 'Australia/Sydney', timeDiff: 2 },
-    { name: '墨尔本', country: '澳大利亚', timezone: 'Australia/Melbourne', timeDiff: 2 },
-    { name: '奥克兰', country: '新西兰', timezone: 'Pacific/Auckland', timeDiff: 4 },
-    { name: '约翰内斯堡', country: '南非', timezone: 'Africa/Johannesburg', timeDiff: -6 },
-    { name: '开罗', country: '埃及', timezone: 'Africa/Cairo', timeDiff: -6 },
-    { name: '开普敦', country: '南非', timezone: 'Africa/Johannesburg', timeDiff: -6 },
-    { name: '内罗毕', country: '肯尼亚', timezone: 'Africa/Nairobi', timeDiff: -5 },
-    { name: '珀斯', country: '澳大利亚', timezone: 'Australia/Perth', timeDiff: 0 },
-    { name: '阿德莱德', country: '澳大利亚', timezone: 'Australia/Adelaide', timeDiff: 1.5 },
-    { name: '堪培拉', country: '澳大利亚', timezone: 'Australia/Canberra', timeDiff: 2 },
-    { name: '惠灵顿', country: '新西兰', timezone: 'Pacific/Auckland', timeDiff: 4 },
-    { name: '卡萨布兰卡', country: '摩洛哥', timezone: 'Africa/Casablanca', timeDiff: -8 },
+    { name: '悉尼', country: '澳大利亚', timezone: 'AEST', timeDiff: 2 },
+    { name: '墨尔本', country: '澳大利亚', timezone: 'AEST', timeDiff: 2 },
+    { name: '奥克兰', country: '新西兰', timezone: 'NZST', timeDiff: 4 },
+    { name: '约翰内斯堡', country: '南非', timezone: 'SAST', timeDiff: -6 },
+    { name: '开罗', country: '埃及', timezone: 'EET', timeDiff: -6 },
+    { name: '开普敦', country: '南非', timezone: 'SAST', timeDiff: -6 },
+    { name: '内罗毕', country: '肯尼亚', timezone: 'EAT', timeDiff: -5 },
+    { name: '珀斯', country: '澳大利亚', timezone: 'AWST', timeDiff: 0 },
+    { name: '阿德莱德', country: '澳大利亚', timezone: 'ACST', timeDiff: 1.5 },
+    { name: '堪培拉', country: '澳大利亚', timezone: 'AEST', timeDiff: 2 },
+    { name: '惠灵顿', country: '新西兰', timezone: 'NZST', timeDiff: 4 },
+    { name: '卡萨布兰卡', country: '摩洛哥', timezone: 'WEST', timeDiff: -7 },
   ];
 
   // 安全获取时区时间，处理无效时区
   const getSafeTime = (timezone: string) => {
     try {
-      return currentTime.tz(timezone).format('HH:mm:ss');
+      // 创建当前时间的副本
+      const now = new Date();
+      
+      // 根据时区缩写计算时差并返回时间
+      let timeDiffHours = 0;
+      
+      // 亚洲时区
+      if (timezone === 'CST' && ['北京', '台北'].includes(majorCities.find(c => c.timezone === timezone)?.name || '')) {
+        timeDiffHours = 0; // 北京时间
+      } else if (timezone === 'JST') {
+        timeDiffHours = 1; // 日本时间
+      } else if (timezone === 'KST') {
+        timeDiffHours = 1; // 韩国时间
+      } else if (timezone === 'SGT' || timezone === 'MYT' || timezone === 'HKT') {
+        timeDiffHours = 0; // 新加坡、马来西亚、香港时间
+      } else if (timezone === 'IST') {
+        timeDiffHours = -2.5; // 印度时间
+      } else if (timezone === 'ICT') {
+        timeDiffHours = -1; // 泰国时间
+      } else if (timezone === 'WIB') {
+        timeDiffHours = -1; // 印度尼西亚时间
+      } else if (timezone === 'GST') {
+        timeDiffHours = -4; // 阿联酋时间
+      } else if (timezone === 'PKT') {
+        timeDiffHours = -3; // 巴基斯坦时间
+      } 
+      // 欧洲时区
+      else if (timezone === 'GMT') {
+        timeDiffHours = -8; // 伦敦时间
+      } else if (timezone === 'CET') {
+        timeDiffHours = -7; // 欧洲中部时间
+      } else if (timezone === 'MSK') {
+        timeDiffHours = -5; // 莫斯科时间
+      } else if (timezone === 'EET') {
+        timeDiffHours = -6; // 东欧时间
+      } 
+      // 美洲时区
+      else if (timezone === 'EST') {
+        timeDiffHours = -13; // 美国东部时间
+      } else if (timezone === 'PST') {
+        timeDiffHours = -16; // 美国太平洋时间
+      } else if (timezone === 'CST' && ['芝加哥', '休斯顿'].includes(majorCities.find(c => c.timezone === timezone)?.name || '')) {
+        timeDiffHours = -14; // 美国中部时间
+      } else if (timezone === 'BRT') {
+        timeDiffHours = -11; // 巴西时间
+      } else if (timezone === 'ART') {
+        timeDiffHours = -11; // 阿根廷时间
+      } else if (timezone === 'CLT') {
+        timeDiffHours = -12; // 智利时间
+      } 
+      // 大洋洲 & 非洲时区
+      else if (timezone === 'AEST') {
+        timeDiffHours = 2; // 澳大利亚东部时间
+      } else if (timezone === 'NZST') {
+        timeDiffHours = 4; // 新西兰时间
+      } else if (timezone === 'SAST' || timezone === 'CAT') {
+        timeDiffHours = -6; // 南非时间
+      } else if (timezone === 'EAT') {
+        timeDiffHours = -5; // 东非时间
+      } else if (timezone === 'AWST') {
+        timeDiffHours = 0; // 澳大利亚西部时间
+      } else if (timezone === 'ACST') {
+        timeDiffHours = 1.5; // 澳大利亚中部标准时间
+      } else if (timezone === 'WEST') {
+        timeDiffHours = -7; // 摩洛哥时间
+      } else if (timezone === 'WAT') {
+        timeDiffHours = -7; // 西非时间
+      }
+      
+      // 计算当地时间
+      const localTime = new Date(now.getTime() + (timeDiffHours * 60 * 60 * 1000));
+      
+      // 格式化时间为HH:mm:ss
+      const hours = String(localTime.getHours()).padStart(2, '0');
+      const minutes = String(localTime.getMinutes()).padStart(2, '0');
+      const seconds = String(localTime.getSeconds()).padStart(2, '0');
+      
+      return `${hours}:${minutes}:${seconds}`;
     } catch (error) {
       console.error(`Invalid timezone: ${timezone}`, error);
       return '00:00:00';
