@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { Table, Input, Select, Space, Typography, Tag } from 'antd';
+import { SearchOutlined } from '@ant-design/icons';
+import type { ColumnType } from 'antd/es/table';
 
 interface CityData {
   state: string;
@@ -17,8 +20,7 @@ const GlobalTime: React.FC = () => {
   const [citiesData, setCitiesData] = useState<CityData[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedTimezone, setSelectedTimezone] = useState<string>('all');
-  const [sortField, setSortField] = useState<string>('state');
-  const [sortOrder, setSortOrder] = useState<'ascend' | 'descend'>('ascend');
+
 
   // 城市数据
   const citiesDataRaw: CityData[] = [
@@ -783,17 +785,6 @@ const GlobalTime: React.FC = () => {
     setSearchTerm(e.target.value);
   };
 
-  // 处理时区筛选
-  const handleTimezoneFilter = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedTimezone(e.target.value);
-  };
-
-  // 处理排序
-  const handleSort = (field: string) => {
-    setSortField(field);
-    setSortOrder(sortOrder === 'ascend' ? 'descend' : 'ascend');
-  };
-
   // 格式化时间
   const formatTime = (date: Date): string => {
     const hours = date.getHours().toString().padStart(2, '0');
@@ -881,7 +872,7 @@ const GlobalTime: React.FC = () => {
     return formatTime(hawaiiTime);
   };
 
-  // 过滤和排序数据
+  // 过滤数据
   const filteredAndSortedData = () => {
     let data = [...citiesData];
 
@@ -901,217 +892,315 @@ const GlobalTime: React.FC = () => {
       data = data.filter(city => city.timezone === selectedTimezone);
     }
 
-    // 排序
-    data.sort((a, b) => {
-      let aValue: any;
-      let bValue: any;
-
-      switch (sortField) {
-        case 'state':
-          aValue = a.state;
-          bValue = b.state;
-          break;
-        case 'city':
-          aValue = a.city;
-          bValue = b.city;
-          break;
-        case 'type':
-          aValue = a.type;
-          bValue = b.type;
-          break;
-        case 'population':
-          aValue = a.population;
-          bValue = b.population;
-          break;
-        case 'timezone':
-          aValue = a.timezone;
-          bValue = b.timezone;
-          break;
-        case 'timeDiff':
-          aValue = a.timeDiff;
-          bValue = b.timeDiff;
-          break;
-        case 'localTime':
-          // 基于时差计算的当地时间排序，实际上就是基于timeDiff排序
-          aValue = a.timeDiff;
-          bValue = b.timeDiff;
-          break;
-        case 'bestTime':
-          // 基于最佳发送时间排序，将时间范围转换为分钟数进行比较
-          const parseTimeRange = (timeRange: string) => {
-            const [startTime] = timeRange.split('-');
-            const [hours, minutes] = startTime.split(':').map(Number);
-            return hours * 60 + minutes;
-          };
-          aValue = parseTimeRange(a.bestTime);
-          bValue = parseTimeRange(b.bestTime);
-          break;
-        default:
-          aValue = a.state;
-          bValue = b.state;
-      }
-
-      if (typeof aValue === 'string' && typeof bValue === 'string') {
-        if (sortOrder === 'ascend') {
-          return aValue.localeCompare(bValue);
-        } else {
-          return bValue.localeCompare(aValue);
-        }
-      } else {
-        if (sortOrder === 'ascend') {
-          return aValue - bValue;
-        } else {
-          return bValue - aValue;
-        }
-      }
-    });
-
     return data;
   };
 
 
 
+  const { Title, Text } = Typography;
+  const { Option } = Select;
+
+  // 定义表格列
+  const columns: ColumnType<CityData>[] = [
+    {
+      title: '州名',
+      dataIndex: 'state',
+      key: 'state',
+      sorter: (a, b) => a.state.localeCompare(b.state),
+      render: (state, record) => (
+        <Space direction="vertical" size={2}>
+          <Text strong style={{ fontSize: '15px', color: '#1e293b' }}>{state}</Text>
+          <Text type="secondary" style={{ fontSize: '0.85rem' }}>{record.state_en}</Text>
+        </Space>
+      ),
+      width: 150,
+    },
+    {
+      title: '城市',
+      dataIndex: 'city',
+      key: 'city',
+      sorter: (a, b) => a.city.localeCompare(b.city),
+      render: (city, record) => (
+        <Space direction="vertical" size={4}>
+          <Text strong style={{ fontSize: '15px', color: '#1e293b' }}>{city}</Text>
+          <Text type="secondary" style={{ fontSize: '0.85rem' }}>{record.city_en}</Text>
+          <Tag color={record.type === "州首府" ? 'blue' : 'purple'}>
+            {record.type === "州首府" ? "州首府" : "主要城市"}
+          </Tag>
+        </Space>
+      ),
+      width: 180,
+    },
+    {
+      title: '城市类型',
+      dataIndex: 'type',
+      key: 'type',
+      sorter: (a, b) => a.type.localeCompare(b.type),
+      render: (type) => (
+        <Text type="secondary" style={{ fontWeight: 500 }}>{type}</Text>
+      ),
+      width: 120,
+    },
+    {
+      title: '人口数量',
+      dataIndex: 'population',
+      key: 'population',
+      sorter: (a, b) => a.population - b.population,
+      render: (population) => (
+        <Text strong style={{ color: '#1e293b' }}>{formatPopulation(population)}</Text>
+      ),
+      width: 120,
+    },
+    {
+      title: '时区',
+      dataIndex: 'timezone',
+      key: 'timezone',
+      sorter: (a, b) => a.timezone.localeCompare(b.timezone),
+      render: (timezone) => (
+        <Text type="secondary" style={{ fontWeight: 500 }}>{getTimezoneFullName(timezone)}</Text>
+      ),
+      width: 150,
+    },
+    {
+      title: '当地时间',
+      key: 'localTime',
+      sorter: (a, b) => a.timeDiff - b.timeDiff,
+      render: (_, record) => (
+        <Text strong style={{ color: '#667eea', fontSize: '15px', letterSpacing: '0.5px' }}>
+          {calculateLocalTime(record.timeDiff)}
+        </Text>
+      ),
+      width: 140,
+    },
+    {
+      title: '与北京时间时差',
+      key: 'timeDiff',
+      sorter: (a, b) => a.timeDiff - b.timeDiff,
+      render: (_, record) => {
+        let timeDiffText: string;
+        if (record.timeDiff === 0) {
+          timeDiffText = "相同";
+        } else if (record.timeDiff > 0) {
+          timeDiffText = `早${record.timeDiff}小时`;
+        } else {
+          timeDiffText = `晚${Math.abs(record.timeDiff)}小时`;
+        }
+        return (
+          <Text strong style={{ 
+            color: record.timeDiff > 0 ? '#ef4444' : (record.timeDiff < 0 ? '#10b981' : '#6b7280')
+          }}>
+            {timeDiffText}
+          </Text>
+        );
+      },
+      width: 160,
+    },
+    {
+      title: '最佳发送时间',
+      dataIndex: 'bestTime',
+      key: 'bestTime',
+      sorter: (a, b) => {
+        const parseTimeRange = (timeRange: string) => {
+          const [startTime] = timeRange.split('-');
+          const [hours, minutes] = startTime.split(':').map(Number);
+          return hours * 60 + minutes;
+        };
+        return parseTimeRange(a.bestTime) - parseTimeRange(b.bestTime);
+      },
+      render: (bestTime) => (
+        <Tag color="success" style={{ fontWeight: 'bold' }}>
+          {bestTime}
+        </Tag>
+      ),
+      width: 140,
+    },
+  ];
+
   return (
-    <div style={{ backgroundColor: '#f5f7fa', padding: '20px', minHeight: '100%' }}>
-      <h1 style={{ marginBottom: '24px', fontSize: '24px', fontWeight: 600 }}>全球各地时间</h1>
+    <div style={{ 
+      backgroundColor: '#f5f8fa', 
+      padding: '20px', 
+      minHeight: '100vh', 
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+    }}>
       <div style={{ 
         maxWidth: '1600px', 
         margin: '0 auto', 
         background: 'white', 
-        borderRadius: '10px', 
-        boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', 
+        borderRadius: '16px', 
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.06)', 
         overflow: 'hidden' 
       }}>
+        {/* 顶部渐变背景 */}
         <div style={{ 
-          background: 'linear-gradient(135deg, #1e3c72, #2a5298)', 
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
           color: 'white', 
-          padding: '30px 20px', 
+          padding: '40px 30px', 
           textAlign: 'center' 
         }}>
-          <h1 style={{ fontSize: '2.2rem', marginBottom: '10px' }}>美国各州首府及主要城市时区与外贸短信发送时间</h1>
-          <p style={{ fontSize: '1.1rem', opacity: 0.9, marginBottom: '20px' }}>了解美国各城市时区、人口、与北京时间的时差及最佳外贸沟通时间</p>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginTop: '20px', flexWrap: 'wrap' }}>
-            <div style={{ background: 'rgba(255, 255, 255, 0.15)', padding: '12px 20px', borderRadius: '8px', minWidth: '180px' }}>
-              <div style={{ fontSize: '0.85rem', opacity: 0.8, marginBottom: '5px' }}>北京时间</div>
-              <div style={{ fontSize: '1.3rem', fontWeight: 'bold' }}>{calculateBeijingTime()}</div>
-            </div>
-            <div style={{ background: 'rgba(255, 255, 255, 0.15)', padding: '12px 20px', borderRadius: '8px', minWidth: '180px' }}>
-              <div style={{ fontSize: '0.85rem', opacity: 0.8, marginBottom: '5px' }}>东部时间 (EST)</div>
-              <div style={{ fontSize: '1.3rem', fontWeight: 'bold' }}>{calculateEasternTime()}</div>
-            </div>
-            <div style={{ background: 'rgba(255, 255, 255, 0.15)', padding: '12px 20px', borderRadius: '8px', minWidth: '180px' }}>
-              <div style={{ fontSize: '0.85rem', opacity: 0.8, marginBottom: '5px' }}>中部时间 (CST)</div>
-              <div style={{ fontSize: '1.3rem', fontWeight: 'bold' }}>{calculateCentralTime()}</div>
-            </div>
-            <div style={{ background: 'rgba(255, 255, 255, 0.15)', padding: '12px 20px', borderRadius: '8px', minWidth: '180px' }}>
-              <div style={{ fontSize: '0.85rem', opacity: 0.8, marginBottom: '5px' }}>山地时间 (MST)</div>
-              <div style={{ fontSize: '1.3rem', fontWeight: 'bold' }}>{calculateMountainTime()}</div>
-            </div>
-            <div style={{ background: 'rgba(255, 255, 255, 0.15)', padding: '12px 20px', borderRadius: '8px', minWidth: '180px' }}>
-              <div style={{ fontSize: '0.85rem', opacity: 0.8, marginBottom: '5px' }}>太平洋时间 (PST)</div>
-              <div style={{ fontSize: '1.3rem', fontWeight: 'bold' }}>{calculatePacificTime()}</div>
-            </div>
-            <div style={{ background: 'rgba(255, 255, 255, 0.15)', padding: '12px 20px', borderRadius: '8px', minWidth: '180px' }}>
-              <div style={{ fontSize: '0.85rem', opacity: 0.8, marginBottom: '5px' }}>阿拉斯加时间 (AKST)</div>
-              <div style={{ fontSize: '1.3rem', fontWeight: 'bold' }}>{calculateAlaskaTime()}</div>
-            </div>
-            <div style={{ background: 'rgba(255, 255, 255, 0.15)', padding: '12px 20px', borderRadius: '8px', minWidth: '180px' }}>
-              <div style={{ fontSize: '0.85rem', opacity: 0.8, marginBottom: '5px' }}>夏威夷时间 (HST)</div>
-              <div style={{ fontSize: '1.3rem', fontWeight: 'bold' }}>{calculateHawaiiTime()}</div>
-            </div>
+          <Title level={1} style={{ 
+            color: 'white', 
+            marginBottom: '15px', 
+            fontWeight: 700, 
+            textShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+            fontSize: '2.5rem'
+          }}>
+            美国各地时间
+          </Title>
+          <Text style={{ 
+            fontSize: '1.2rem', 
+            opacity: 0.95, 
+            marginBottom: '30px',
+            lineHeight: 1.6
+          }}>
+            了解美国各城市时区、人口、与北京时间的时差及最佳外贸沟通时间
+          </Text>
+          
+          {/* 时间显示卡片 */}
+          <div style={{ 
+            maxWidth: '1200px',
+            margin: '30px auto 0',
+            width: '100%',
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '12px',
+            flexWrap: 'wrap'
+          }}>
+            {[
+              { title: '北京时间', value: calculateBeijingTime() },
+              { title: '东部时间 (EST)', value: calculateEasternTime() },
+              { title: '中部时间 (CST)', value: calculateCentralTime() },
+              { title: '山地时间 (MST)', value: calculateMountainTime() },
+              { title: '太平洋时间 (PST)', value: calculatePacificTime() },
+              { title: '阿拉斯加时间 (AKST)', value: calculateAlaskaTime() },
+              { title: '夏威夷时间 (HST)', value: calculateHawaiiTime() }
+            ].map((item, index) => (
+              <div 
+                key={index} 
+                style={{
+                  background: 'rgba(255, 255, 255, 0.15)', 
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '12px',
+                  backdropFilter: 'blur(10px)',
+                  transition: 'all 0.3s ease',
+                  padding: '16px 12px',
+                  minWidth: '140px',
+                  flex: '1 1 140px',
+                  maxWidth: '180px',
+                  textAlign: 'center',
+                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                }}
+              >
+                <div style={{ 
+                  fontSize: '0.85rem', 
+                  opacity: 0.9, 
+                  marginBottom: '8px',
+                  fontWeight: 500,
+                  color: 'white'
+                }}>
+                  {item.title}
+                </div>
+                <div style={{ 
+                  fontSize: '1.35rem', 
+                  fontWeight: 'bold',
+                  letterSpacing: '0.5px',
+                  color: 'white',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap'
+                }}>
+                  {item.value}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '15px 20px', background: '#f0f4f8', borderBottom: '1px solid #e1e8ed', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <input type="text" placeholder="搜索州名或城市..." style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: '4px', marginRight: '10px', width: '200px' }} 
-                   value={searchTerm} onChange={handleSearch} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <label style={{ marginRight: '10px' }}>按时区筛选：</label>
-            <select style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: '4px' }} 
-                    value={selectedTimezone} onChange={handleTimezoneFilter}>
-              <option value="all">所有时区</option>
-              <option value="EST">东部时间 (EST)</option>
-              <option value="CST">中部时间 (CST)</option>
-              <option value="MST">山地时间 (MST)</option>
-              <option value="PST">太平洋时间 (PST)</option>
-              <option value="AKST">阿拉斯加时间 (AKST)</option>
-              <option value="HST">夏威夷时间 (HST)</option>
-            </select>
-          </div>
+        
+        {/* 搜索和筛选区域 */}
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          padding: '20px 30px', 
+          background: '#f8fafc', 
+          borderBottom: '1px solid #e2e8f0',
+          flexWrap: 'wrap',
+          gap: '16px',
+          alignContent: 'center'
+        }}>
+          <Input
+            placeholder="搜索州名或城市..."
+            prefix={<SearchOutlined />}
+            value={searchTerm}
+            onChange={handleSearch}
+            style={{ 
+              width: 300,
+              borderRadius: '8px',
+              boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
+              transition: 'all 0.3s ease'
+            }}
+          />
+          <Select
+            value={selectedTimezone}
+            onChange={(value) => setSelectedTimezone(value)}
+            style={{ 
+              width: 200,
+              borderRadius: '8px',
+              boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
+              transition: 'all 0.3s ease'
+            }}
+            placeholder="按时区筛选"
+          >
+            <Option value="all">所有时区</Option>
+            <Option value="EST">东部时间 (EST)</Option>
+            <Option value="CST">中部时间 (CST)</Option>
+            <Option value="MST">山地时间 (MST)</Option>
+            <Option value="PST">太平洋时间 (PST)</Option>
+            <Option value="AKST">阿拉斯加时间 (AKST)</Option>
+            <Option value="HST">夏威夷时间 (HST)</Option>
+          </Select>
         </div>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th onClick={() => handleSort('state')} style={{ background: '#2a5298', color: 'white', padding: '15px', textAlign: 'left', cursor: 'pointer', position: 'relative' }}>
-                州名 {sortField === 'state' && (sortOrder === 'ascend' ? '↑' : '↓')}
-              </th>
-              <th onClick={() => handleSort('city')} style={{ background: '#2a5298', color: 'white', padding: '15px', textAlign: 'left', cursor: 'pointer', position: 'relative' }}>
-                城市 {sortField === 'city' && (sortOrder === 'ascend' ? '↑' : '↓')}
-              </th>
-              <th onClick={() => handleSort('type')} style={{ background: '#2a5298', color: 'white', padding: '15px', textAlign: 'left', cursor: 'pointer', position: 'relative' }}>
-                城市类型 {sortField === 'type' && (sortOrder === 'ascend' ? '↑' : '↓')}
-              </th>
-              <th onClick={() => handleSort('population')} style={{ background: '#2a5298', color: 'white', padding: '15px', textAlign: 'left', cursor: 'pointer', position: 'relative' }}>
-                人口数量 {sortField === 'population' && (sortOrder === 'ascend' ? '↑' : '↓')}
-              </th>
-              <th onClick={() => handleSort('timezone')} style={{ background: '#2a5298', color: 'white', padding: '15px', textAlign: 'left', cursor: 'pointer', position: 'relative' }}>
-                时区 {sortField === 'timezone' && (sortOrder === 'ascend' ? '↑' : '↓')}
-              </th>
-              <th onClick={() => handleSort('localTime')} style={{ background: '#2a5298', color: 'white', padding: '15px', textAlign: 'left', cursor: 'pointer', position: 'relative' }}>
-                当地时间 {sortField === 'localTime' && (sortOrder === 'ascend' ? '↑' : '↓')}
-              </th>
-              <th onClick={() => handleSort('timeDiff')} style={{ background: '#2a5298', color: 'white', padding: '15px', textAlign: 'left', cursor: 'pointer', position: 'relative' }}>
-                与北京时间时差 {sortField === 'timeDiff' && (sortOrder === 'ascend' ? '↑' : '↓')}
-              </th>
-              <th onClick={() => handleSort('bestTime')} style={{ background: '#2a5298', color: 'white', padding: '15px', textAlign: 'left', cursor: 'pointer', position: 'relative' }}>
-                最佳发送时间 (北京时间) {sortField === 'bestTime' && (sortOrder === 'ascend' ? '↑' : '↓')}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredAndSortedData().map((city, index) => {
-              const localTime = calculateLocalTime(city.timeDiff);
-              const populationFormatted = formatPopulation(city.population);
-              let timeDiffText: string;
-              if (city.timeDiff === 0) {
-                timeDiffText = "相同";
-              } else if (city.timeDiff > 0) {
-                timeDiffText = `早${city.timeDiff}小时`;
-              } else {
-                timeDiffText = `晚${Math.abs(city.timeDiff)}小时`;
-              }
-              const cityTypeClass = city.type === "州首府" ? "capital" : "major";
-              const cityTypeText = city.type === "州首府" ? "州首府" : "主要城市";
-              return (
-                <tr key={index} style={{ borderBottom: '1px solid #e1e8ed' }} className={`timezone-${city.timezone}`}>
-                  <td style={{ padding: '15px', borderLeft: '4px solid #3498db' }}>
-                    <div style={{ fontWeight: 600 }}>{city.state}</div>
-                    <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '3px' }}>{city.state_en}</div>
-                  </td>
-                  <td style={{ padding: '15px', borderLeft: '4px solid #3498db' }}>
-                    <div style={{ fontWeight: 600 }}>{city.city}</div>
-                    <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '3px' }}>{city.city_en}</div>
-                    <div style={{ fontSize: '0.8rem', padding: '3px 8px', borderRadius: '12px', fontWeight: 600, display: 'inline-block', marginTop: '5px', backgroundColor: cityTypeClass === 'capital' ? '#3498db' : '#9b59b6', color: 'white' }}>{cityTypeText}</div>
-                  </td>
-                  <td style={{ padding: '15px', borderLeft: '4px solid #3498db' }}>{city.type}</td>
-                  <td style={{ padding: '15px', borderLeft: '4px solid #3498db', fontWeight: 500 }}>{populationFormatted}</td>
-                  <td style={{ padding: '15px', borderLeft: '4px solid #3498db' }}>{getTimezoneFullName(city.timezone)}</td>
-                  <td style={{ padding: '15px', borderLeft: '4px solid #3498db', fontWeight: 600, color: '#2c3e50' }}>{localTime}</td>
-                  <td style={{ padding: '15px', borderLeft: '4px solid #3498db' }}>
-                    <span style={{ fontWeight: 'bold', color: city.timeDiff > 0 ? '#e74c3c' : (city.timeDiff < 0 ? '#27ae60' : '') }}>{timeDiffText}</span>
-                  </td>
-                  <td style={{ padding: '15px', borderLeft: '4px solid #3498db' }}>
-                    <span style={{ backgroundColor: '#2ecc71', color: 'white', padding: '5px 10px', borderRadius: '4px', fontWeight: 'bold', display: 'inline-block' }}>{city.bestTime}</span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        <div style={{ textAlign: 'center', padding: '20px', background: '#f0f4f8', color: '#666', fontSize: '0.9rem' }}>
-          <p>注：最佳发送时间基于当地工作时间（上午9点-下午5点）计算，转换为北京时间；人口数据为城市或州总人口估计值</p>
-          <p>© 科浦诺外贸管理系统</p>
+        
+        {/* 表格 */}
+        <Table
+          columns={columns}
+          dataSource={filteredAndSortedData()}
+          rowKey={(_, index) => index?.toString() || ''}
+          pagination={{ pageSize: 200 }}
+          scroll={{ x: 1200 }}
+          rowClassName={(record, index) => `timezone-${record.timezone} ${index % 2 === 0 ? 'even' : 'odd'}`}
+          onRow={(_, index) => ({
+            style: {
+              borderBottom: '1px solid #f1f5f9',
+              transition: 'all 0.2s ease',
+              backgroundColor: index && index % 2 === 0 ? '#ffffff' : '#fafafa'
+            },
+            onMouseEnter: (e) => {
+              (e.currentTarget as HTMLElement).style.backgroundColor = '#f0f4ff';
+              (e.currentTarget as HTMLElement).style.boxShadow = 'inset 0 0 0 1px #e0e7ff';
+            },
+            onMouseLeave: (e) => {
+              (e.currentTarget as HTMLElement).style.backgroundColor = index && index % 2 === 0 ? '#ffffff' : '#fafafa';
+              (e.currentTarget as HTMLElement).style.boxShadow = 'none';
+            },
+          })}
+          style={{ margin: 0 }}
+        />
+        
+        {/* 页脚 */}
+        <div style={{ 
+          textAlign: 'center', 
+          padding: '24px 30px', 
+          background: '#f8fafc', 
+          color: '#64748b', 
+          fontSize: '14px',
+          borderTop: '1px solid #e2e8f0'
+        }}>
+          <Text type="secondary" style={{ marginBottom: '8px', display: 'block', lineHeight: 1.6 }}>
+            注：最佳发送时间基于当地工作时间（上午9点-下午5点）计算，转换为北京时间；人口数据为城市或州总人口估计值
+          </Text>
+          <Text strong style={{ color: '#475569' }}>
+            © {new Date().getFullYear()} 科浦诺外贸管理系统
+          </Text>
         </div>
       </div>
     </div>
