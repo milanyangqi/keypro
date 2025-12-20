@@ -2,17 +2,17 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import XLSX from 'xlsx';
-import WhatsAppNumber from '../models/WhatsAppNumber';
+import Email from '../models/Email';
 
-// 解析文件中的号码
-const parseNumbersFromFile = (filePath: string, fileExt: string): string[] => {
-  let numbers: string[] = [];
+// 解析文件中的邮箱
+const parseEmailsFromFile = (filePath: string, fileExt: string): string[] => {
+  let emails: string[] = [];
   
   try {
     if (fileExt === '.txt' || fileExt === '.csv') {
       // 读取文本文件
       const content = fs.readFileSync(filePath, 'utf8');
-      numbers = content
+      emails = content
         .split('\n')
         .map(line => line.trim())
         .filter(line => line.length > 0);
@@ -23,22 +23,22 @@ const parseNumbersFromFile = (filePath: string, fileExt: string): string[] => {
       const worksheet = workbook.Sheets[firstSheetName];
       const data = XLSX.utils.sheet_to_json(worksheet);
       
-      // 假设第一列是号码
-      numbers = data.map((row: any) => {
+      // 假设第一列是邮箱
+      emails = data.map((row: any) => {
         const values = Object.values(row);
         return values[0] ? String(values[0]).trim() : '';
-      }).filter(number => number.length > 0);
+      }).filter(email => email.length > 0);
     }
   } catch (error) {
     console.error('Error parsing file:', error);
     throw new Error('Failed to parse file');
   }
   
-  return numbers;
+  return emails;
 };
 
-// 上传WhatsApp号码控制器
-export const uploadNumbers = async (req: express.Request, res: express.Response) => {
+// 上传邮箱控制器
+export const uploadEmails = async (req: express.Request, res: express.Response) => {
   try {
     const userId = (req as any).user?.userId;
     const { industry } = req.body;
@@ -67,74 +67,74 @@ export const uploadNumbers = async (req: express.Request, res: express.Response)
     const filePath = req.file.path;
     const fileExt = path.extname(req.file.originalname).toLowerCase();
     
-    // 解析号码
-    const numbers = parseNumbersFromFile(filePath, fileExt);
+    // 解析邮箱
+    const emails = parseEmailsFromFile(filePath, fileExt);
     
-    if (numbers.length === 0) {
+    if (emails.length === 0) {
       // 删除临时文件
       fs.unlinkSync(filePath);
       
       return res.status(400).json({
         status: 'error',
-        message: 'No valid numbers found in the file'
+        message: 'No valid emails found in the file'
       });
     }
     
-    console.log('Parsed numbers:', numbers);
+    console.log('Parsed emails:', emails);
     
     // 去重并清理
-    const uniqueNumbers = [...new Set(numbers.map(n => n.trim()))];
+    const uniqueEmails = [...new Set(emails.map(n => n.trim()))];
     
-    // 查询已存在的号码
-    const existingNumbers = await WhatsAppNumber.find({
-      number: { $in: uniqueNumbers }
+    // 查询已存在的邮箱
+    const existingEmails = await Email.find({
+      email: { $in: uniqueEmails }
     });
     
-    console.log('Found existing numbers:', existingNumbers.length);
+    console.log('Found existing emails:', existingEmails.length);
     
-    // 提取已存在的号码
-    const existingNumberSet = new Set(existingNumbers.map(n => n.number));
+    // 提取已存在的邮箱
+    const existingEmailSet = new Set(existingEmails.map(n => n.email));
     
-    // 分离已存在和新号码
-    const matchedNumbers = existingNumbers;
-    const unmatchedNumbers = uniqueNumbers.filter(n => !existingNumberSet.has(n));
+    // 分离已存在和新邮箱
+    const matchedEmails = existingEmails;
+    const unmatchedEmails = uniqueEmails.filter(n => !existingEmailSet.has(n));
     
-    console.log('Unmatched numbers to save:', unmatchedNumbers.length);
+    console.log('Unmatched emails to save:', unmatchedEmails.length);
     
-    // 保存新号码到数据库
+    // 保存新邮箱到数据库
     const uploadTime = new Date();
-    let savedNumbers: any[] = [];
+    let savedEmails: any[] = [];
     
-    if (unmatchedNumbers.length > 0) {
-      savedNumbers = await Promise.all(
-        unmatchedNumbers.map(async (number) => {
-          console.log('Saving number:', number);
+    if (unmatchedEmails.length > 0) {
+      savedEmails = await Promise.all(
+        unmatchedEmails.map(async (email) => {
+          console.log('Saving email:', email);
           
-          const whatsappNumber = new WhatsAppNumber({
-            number,
+          const emailDoc = new Email({
+            email,
             industry: industry.trim(),
             uploader: userId,
             uploadTime
           });
           
-          return await whatsappNumber.save();
+          return await emailDoc.save();
         })
       );
     }
     
-    console.log('Saved numbers:', savedNumbers.length);
+    console.log('Saved emails:', savedEmails.length);
     
     // 删除临时文件
     fs.unlinkSync(filePath);
     
     return res.status(200).json({
       status: 'success',
-      message: 'Numbers uploaded successfully',
+      message: 'Emails uploaded successfully',
       data: {
-        matched: matchedNumbers.length,
-        matchedNumbers,
-        saved: savedNumbers.length,
-        savedNumbers
+        matched: matchedEmails.length,
+        matchedEmails,
+        saved: savedEmails.length,
+        savedEmails
       }
     });
   } catch (error: any) {
@@ -155,52 +155,48 @@ export const uploadNumbers = async (req: express.Request, res: express.Response)
   }
 };
 
-// 匹配WhatsApp号码控制器
-export const matchNumbers = async (req: express.Request, res: express.Response) => {
+// 匹配邮箱控制器
+export const matchEmails = async (req: express.Request, res: express.Response) => {
   try {
-    const { numbers } = req.body;
+    const { emails } = req.body;
     
-    if (!Array.isArray(numbers) || numbers.length === 0) {
+    if (!Array.isArray(emails) || emails.length === 0) {
       return res.status(400).json({
         status: 'error',
-        message: 'Numbers array is required'
+        message: 'Emails array is required'
       });
     }
     
-    console.log('Matching numbers:', numbers);
-    
-    // 查询所有已存在的号码
-    const allExistingNumbers = await WhatsAppNumber.find({});
-    console.log('All existing numbers:', allExistingNumbers.length);
+    console.log('Matching emails:', emails);
     
     // 去重并清理
-    const uniqueNumbers = [...new Set(numbers.map(n => n.trim()))];
+    const uniqueEmails = [...new Set(emails.map(n => n.trim()))];
     
-    // 查询已存在的号码
-    const existingNumbers = await WhatsAppNumber.find({
-      number: { $in: uniqueNumbers }
+    // 查询已存在的邮箱
+    const existingEmails = await Email.find({
+      email: { $in: uniqueEmails }
     });
     
-    console.log('Found existing numbers:', existingNumbers.length);
+    console.log('Found existing emails:', existingEmails.length);
     
-    // 提取已存在的号码
-    const existingNumberSet = new Set(existingNumbers.map(n => n.number));
+    // 提取已存在的邮箱
+    const existingEmailSet = new Set(existingEmails.map(n => n.email));
     
-    // 分离已存在和新号码
-    const matched = existingNumbers;
-    const unmatched = uniqueNumbers.filter(n => !existingNumberSet.has(n));
+    // 分离已存在和新邮箱
+    const matched = existingEmails;
+    const unmatched = uniqueEmails.filter(n => !existingEmailSet.has(n));
     
     return res.status(200).json({
       status: 'success',
-      message: 'Number matching completed',
+      message: 'Email matching completed',
       data: {
         matched: {
           count: matched.length,
-          numbers: matched
+          emails: matched
         },
         unmatched: {
           count: unmatched.length,
-          numbers: unmatched
+          emails: unmatched
         }
       }
     });
@@ -213,10 +209,10 @@ export const matchNumbers = async (req: express.Request, res: express.Response) 
   }
 };
 
-// 查询WhatsApp号码控制器
-export const getNumbers = async (req: express.Request, res: express.Response) => {
+// 查询邮箱控制器
+export const getEmails = async (req: express.Request, res: express.Response) => {
   try {
-    const { date, startDate, endDate, industry, page = 1, limit = 20 } = req.query;
+    const { date, startDate, endDate, industry, uploader, page = 1, limit = 20 } = req.query;
     
     console.log('Query params:', req.query);
     
@@ -275,26 +271,31 @@ export const getNumbers = async (req: express.Request, res: express.Response) =>
       };
     }
     
+    // 按上传者查询
+    if (uploader) {
+      query.uploader = uploader as string;
+    }
+    
     console.log('Final query:', query);
     
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
     
-    // 查询号码
-    const numbers = await WhatsAppNumber.find(query)
+    // 查询邮箱
+    const emails = await Email.find(query)
       .populate('uploader', 'username email')
       .skip(skip)
       .limit(parseInt(limit as string))
       .sort({ uploadTime: -1 });
     
-    const total = await WhatsAppNumber.countDocuments(query);
+    const total = await Email.countDocuments(query);
     
-    console.log('Query result:', numbers.length, 'total:', total);
+    console.log('Query result:', emails.length, 'total:', total);
     
     return res.status(200).json({
       status: 'success',
-      message: 'Numbers retrieved successfully',
+      message: 'Emails retrieved successfully',
       data: {
-        numbers,
+        emails,
         pagination: {
           total,
           page: parseInt(page as string),
@@ -312,8 +313,8 @@ export const getNumbers = async (req: express.Request, res: express.Response) =>
   }
 };
 
-// 获取WhatsApp号码统计控制器
-export const getNumberStats = async (req: express.Request, res: express.Response) => {
+// 获取邮箱统计控制器
+export const getEmailStats = async (req: express.Request, res: express.Response) => {
   try {
     const { date } = req.query;
     
@@ -333,17 +334,17 @@ export const getNumberStats = async (req: express.Request, res: express.Response
     }
     
     // 统计总数
-    const total = await WhatsAppNumber.countDocuments(query);
+    const total = await Email.countDocuments(query);
     
     // 按行业统计
-    const industryStats = await WhatsAppNumber.aggregate([
+    const industryStats = await Email.aggregate([
       { $match: query },
       { $group: { _id: '$industry', count: { $sum: 1 } } },
       { $sort: { count: -1 } }
     ]);
     
     // 按日期统计
-    const dateStats = await WhatsAppNumber.aggregate([
+    const dateStats = await Email.aggregate([
       { $match: query },
       { 
         $group: { 
@@ -375,19 +376,19 @@ export const getNumberStats = async (req: express.Request, res: express.Response
 export const downloadTemplate = (req: express.Request, res: express.Response) => {
   try {
     // 检查模板文件是否存在
-    const templatePath = path.join(__dirname, '../../public/whatsapp-template.xlsx');
+    const templatePath = path.join(__dirname, '../../public/email-template.xlsx');
     
     // 如果模板文件不存在，创建一个
     if (!fs.existsSync(templatePath)) {
       // 创建工作簿
       const workbook = XLSX.utils.book_new();
       const worksheet = XLSX.utils.json_to_sheet([
-        { 'WhatsApp Number': '1234567890' },
-        { 'WhatsApp Number': '9876543210' },
-        { 'WhatsApp Number': '1112223333' }
+        { 'Email': 'example1@example.com' },
+        { 'Email': 'example2@example.com' },
+        { 'Email': 'example3@example.com' }
       ]);
       
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Numbers');
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Emails');
       
       // 确保public目录存在
       const publicDir = path.dirname(templatePath);
@@ -400,7 +401,7 @@ export const downloadTemplate = (req: express.Request, res: express.Response) =>
     }
     
     // 下载模板文件
-    res.download(templatePath, 'whatsapp-template.xlsx', (err) => {
+    res.download(templatePath, 'email-template.xlsx', (err) => {
       if (err) {
         console.error('Error downloading template:', err);
         res.status(500).json({
@@ -418,12 +419,12 @@ export const downloadTemplate = (req: express.Request, res: express.Response) =>
   }
 };
 
-// 删除单个WhatsApp号码控制器
-export const deleteNumber = async (req: express.Request, res: express.Response) => {
+// 删除单个邮箱控制器
+export const deleteEmail = async (req: express.Request, res: express.Response) => {
   try {
     const { id } = req.params;
     
-    console.log('=== WhatsApp Delete Request ===');
+    console.log('=== Email Delete Request ===');
     console.log('Request params:', req.params);
     console.log('Request path:', req.path);
     console.log('Request url:', req.url);
@@ -432,28 +433,28 @@ export const deleteNumber = async (req: express.Request, res: express.Response) 
     if (!id) {
       return res.status(400).json({
         status: 'error',
-        message: 'Number ID is required'
+        message: 'Email ID is required'
       });
     }
     
-    console.log('Attempting to delete WhatsAppNumber with id:', id);
-    console.log('Using WhatsAppNumber model:', WhatsAppNumber.modelName);
+    console.log('Attempting to delete Email with id:', id);
+    console.log('Using Email model:', Email.modelName);
     
-    const deletedNumber = await WhatsAppNumber.findByIdAndDelete(id);
+    const deletedEmail = await Email.findByIdAndDelete(id);
     
-    console.log('Deleted WhatsAppNumber result:', deletedNumber);
+    console.log('Deleted Email result:', deletedEmail);
     
-    if (!deletedNumber) {
+    if (!deletedEmail) {
       return res.status(404).json({
         status: 'error',
-        message: 'Number not found'
+        message: 'Email not found'
       });
     }
     
     return res.status(200).json({
       status: 'success',
-      message: 'Number deleted successfully',
-      data: deletedNumber
+      message: 'Email deleted successfully',
+      data: deletedEmail
     });
   } catch (error: any) {
     console.error('Delete error:', error);
@@ -464,8 +465,8 @@ export const deleteNumber = async (req: express.Request, res: express.Response) 
   }
 };
 
-// 批量删除WhatsApp号码控制器
-export const deleteNumbers = async (req: express.Request, res: express.Response) => {
+// 批量删除邮箱控制器
+export const deleteEmails = async (req: express.Request, res: express.Response) => {
   try {
     const { ids } = req.body;
     
@@ -476,13 +477,13 @@ export const deleteNumbers = async (req: express.Request, res: express.Response)
       });
     }
     
-    const result = await WhatsAppNumber.deleteMany({
+    const result = await Email.deleteMany({
       _id: { $in: ids }
     });
     
     return res.status(200).json({
       status: 'success',
-      message: 'Numbers deleted successfully',
+      message: 'Emails deleted successfully',
       data: {
         deletedCount: result.deletedCount
       }

@@ -23,7 +23,7 @@ import {
   DeleteOutlined
 } from '@ant-design/icons';
 import { uploadNumbers, matchNumbers, getNumbers, downloadTemplate, deleteNumber, deleteNumbers } from '../services/whatsapp';
-import { WhatsAppNumber, MatchResult } from '../types';
+import { WhatsAppNumber, WhatsAppMatchResult } from '../types';
 import dayjs, { Dayjs } from 'dayjs';
 
 const { TextArea } = Input;
@@ -40,7 +40,7 @@ const industryOptions = [
 const WhatsAppNumberManagement: React.FC = () => {
   const [form] = Form.useForm();
   const [numbersText, setNumbersText] = useState<string>('');
-  const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
+  const [matchResult, setMatchResult] = useState<WhatsAppMatchResult | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [queryLoading, setQueryLoading] = useState<boolean>(false);
   const [numbers, setNumbers] = useState<WhatsAppNumber[]>([]);
@@ -48,9 +48,9 @@ const WhatsAppNumberManagement: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(500);
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
-  // 默认选择当天日期
+  // 默认选择最近6个月日期，避免只查询当天导致没有结果
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([
-    dayjs(),
+    dayjs().subtract(6, 'month'),
     dayjs()
   ]);
 
@@ -64,13 +64,16 @@ const WhatsAppNumberManagement: React.FC = () => {
   // 处理单个删除
   const handleDelete = async (id: string) => {
     try {
-      const response = await deleteNumber(id);
-      if (response.status === 'success') {
-        message.success('删除成功！');
-        handleQuery();
-      }
+      // 立即从UI中删除，提供更好的用户体验
+      setNumbers(prevNumbers => prevNumbers.filter(number => number._id !== id));
+      
+      await deleteNumber(id);
+      message.success('删除成功！');
+      handleQuery();
     } catch (error: any) {
       message.error(error.message || '删除失败！');
+      // 删除失败时重新查询数据，恢复正确状态
+      handleQuery();
     }
   };
 
@@ -82,14 +85,18 @@ const WhatsAppNumberManagement: React.FC = () => {
     }
     
     try {
+      // 立即从UI中删除，提供更好的用户体验
+      setNumbers(prevNumbers => prevNumbers.filter(number => !selectedRowKeys.includes(number._id)));
+      
       const response = await deleteNumbers(selectedRowKeys as string[]);
-      if (response.status === 'success') {
-        message.success(`成功删除 ${response.data.deletedCount} 个号码！`);
-        setSelectedRowKeys([]);
-        handleQuery();
-      }
+      message.success(`成功删除 ${response.deletedCount} 个号码！`);
+      setSelectedRowKeys([]);
+      handleQuery();
     } catch (error: any) {
       message.error(error.message || '批量删除失败！');
+      // 删除失败时重新查询数据，恢复正确状态
+      handleQuery();
+      setSelectedRowKeys([]);
     }
   };
 
@@ -126,7 +133,7 @@ const WhatsAppNumberManagement: React.FC = () => {
         };
         
         // 显示匹配结果
-        setMatchResult(matchRes as unknown as MatchResult);
+        setMatchResult(matchRes);
         
         message.success(`上传完成，已有 ${matchRes.matched.count} 个号码，新增 ${matchRes.unmatched.count} 个号码`);
         
@@ -221,10 +228,9 @@ const WhatsAppNumberManagement: React.FC = () => {
       }
       
       const response = await getNumbers(params);
-      if (response.status === 'success') {
-        setNumbers(response.data.numbers);
-        setTotal(response.data.pagination.total);
-      }
+      // 直接使用response，因为getNumbers已经返回response.data
+      setNumbers(response.numbers);
+      setTotal(response.pagination.total);
     } catch (error: any) {
       message.error(error.message || '查询失败！');
     } finally {

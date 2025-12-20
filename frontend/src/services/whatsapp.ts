@@ -1,5 +1,5 @@
 import apiClient from '../utils/apiClient';
-import { MatchResult, Stats } from '../types';
+import { WhatsAppMatchResult, Stats } from '../types';
 
 // 上传WhatsApp号码
 export const uploadNumbers = async (file: File, industry: string) => {
@@ -7,15 +7,16 @@ export const uploadNumbers = async (file: File, industry: string) => {
   formData.append('file', file);
   formData.append('industry', industry);
   
-  return apiClient.post('/whatsapp/upload', formData, {
+  const response = await apiClient.post('/whatsapp/upload', formData, {
     headers: {
       'Content-Type': 'multipart/form-data'
     }
   });
+  return response.data;
 };
 
 // 匹配WhatsApp号码
-export const matchNumbers = async (numbers: string[]): Promise<MatchResult> => {
+export const matchNumbers = async (numbers: string[]): Promise<WhatsAppMatchResult> => {
   const response = await apiClient.post('/whatsapp/match', { numbers });
   return response.data;
 };
@@ -29,7 +30,8 @@ export const getNumbers = async (params: {
   page?: number;
   limit?: number;
 }) => {
-  return apiClient.get('/whatsapp', { params });
+  const response = await apiClient.get('/whatsapp', { params });
+  return response.data;
 };
 
 // 获取号码统计
@@ -51,10 +53,12 @@ export const downloadTemplate = () => {
 
 // 删除单个WhatsApp号码
 export const deleteNumber = async (id: string) => {
-  return apiClient.delete(`/whatsapp/${id}`);
+  const response = await apiClient.delete(`/whatsapp/${id}`);
+  return response.data;
 };
 
 // 批量删除WhatsApp号码
 export const deleteNumbers = async (ids: string[]) => {
-  return apiClient.post('/whatsapp/batch/delete', { ids });
+  const response = await apiClient.post('/whatsapp/batch/delete', { ids });
+  return response.data;
 };

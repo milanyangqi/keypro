@@ -34,6 +34,17 @@ export interface WhatsAppNumber {
   updatedAt: string;
 }
 
+// Email类型
+export interface Email {
+  _id: string;
+  email: string;
+  industry: string;
+  uploader: string | User;
+  uploadTime: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // 分页响应类型
 export interface Pagination<T> {
   total: number;
@@ -65,5 +76,29 @@ export interface MatchResult {
   unmatched: {
     count: number;
     numbers: string[];
+  };
+}
+
+// WhatsApp匹配结果类型
+export interface WhatsAppMatchResult {
+  matched: {
+    count: number;
+    numbers: WhatsAppNumber[];
+  };
+  unmatched: {
+    count: number;
+    numbers: string[];
+  };
+}
+
+// Email匹配结果类型
+export interface EmailMatchResult {
+  matched: {
+    count: number;
+    emails: Email[];
+  };
+  unmatched: {
+    count: number;
+    emails: string[];
   };
 }

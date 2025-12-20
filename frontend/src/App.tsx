@@ -13,6 +13,7 @@ import GlobalTime from './pages/GlobalTime';
 import GlobalWorldTime from './pages/GlobalWorldTime';
 import ProductCatalogCreation1 from './pages/ProductCatalogCreation1';
 import UserManagement from './pages/UserManagement';
+import EmailManagement from './pages/EmailManagement';
 import NotFound from './pages/NotFound';
 
 // 导入服务
@@ -86,6 +87,7 @@ const App: React.FC = () => {
           <Route path="global-world-time" element={<GlobalWorldTime />} />
           <Route path="product-catalog-creation-1" element={<ProductCatalogCreation1 />} />
           <Route path="user-management" element={<UserManagement />} />
+          <Route path="email-management" element={<EmailManagement />} />
           </Route>
 
           {/* 重定向根路径到登录 */}

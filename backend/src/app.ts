@@ -13,6 +13,7 @@ dotenv.config();
 import authRoutes from './routes/auth';
 import userRoutes from './routes/user';
 import whatsappRoutes from './routes/whatsapp';
+import emailRoutes from './routes/email';
 
 // 创建Express应用
 const app = express();
@@ -41,6 +42,7 @@ app.use(limiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
+app.use('/api/email', emailRoutes);
 
 // 健康检查路由
 app.get('/api/health', (req, res) => {

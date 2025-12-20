@@ -10,7 +10,8 @@ import {
   UserOutlined,
   SettingOutlined,
   LogoutOutlined,
-  FormatPainterOutlined
+  FormatPainterOutlined,
+  MailOutlined
 } from '@ant-design/icons';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { User } from '../types';
@@ -51,6 +52,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
       icon: <DatabaseOutlined />,
       label: 'WhatsApp号码采集',
       onClick: () => navigate('/dashboard/whatsapp-number-collection')
+    },
+    {
+      key: '9',
+      icon: <MailOutlined />,
+      label: 'E-mail地址管理',
+      onClick: () => navigate('/dashboard/email-management')
     },
     {
       key: '4',
@@ -110,7 +117,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
         onCollapse={setCollapsed}
         width={260}
         collapsedWidth={80}
-        style={{ background: '#001529', flex: '0 0 260px', width: '260px' }}
+        style={{ 
+          background: '#001529', 
+          flex: '0 0 260px', 
+          width: '260px',
+          position: 'relative' // 确保绝对定位的子元素相对于Sider定位
+        }}
       >
         <div style={{ 
           height: 32, 
@@ -130,6 +142,36 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
           mode="inline"
           items={menuItems.filter(item => !item.hidden)}
         />
+        
+        {/* 底部联系信息 */}
+        <div style={{
+          position: 'absolute',
+          bottom: collapsed ? '40px' : '50px', // 为收缩按钮留出空间
+          left: 0,
+          right: 0,
+          padding: collapsed ? '16px 8px' : '16px',
+          background: '#001529',
+          borderTop: '1px solid #1890ff',
+          textAlign: 'center',
+          color: '#fff',
+          zIndex: 10 // 确保在其他元素之上显示
+        }}>
+          <div style={{ marginBottom: 12, fontSize: 14 }}>
+            问题反馈，请联系微信: 437991663
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <img 
+              src="/wechat.jpg" 
+              alt="微信二维码" 
+              style={{
+                width: collapsed ? 50 : 120,
+                height: collapsed ? 50 : 120,
+                borderRadius: 8,
+                objectFit: 'cover'
+              }}
+            />
+          </div>
+        </div>
       </Sider>
       <Layout>
         <Header style={{ 

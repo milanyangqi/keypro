@@ -1,6 +1,6 @@
 {
   "name": "keypro-trade-backend",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "科浦诺外贸管理系统后端服务",
   "main": "dist/app.js",
   "scripts": {
