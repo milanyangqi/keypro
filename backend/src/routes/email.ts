@@ -8,7 +8,8 @@ import {
   getEmailStats, 
   downloadTemplate, 
   deleteEmail, 
-  deleteEmails 
+  deleteEmails,
+  exportEmails  // 添加导入
 } from '../controllers/email';
 import authMiddleware from '../middleware/auth';
 
@@ -58,5 +59,8 @@ router.delete('/:id', authMiddleware, deleteEmail);
 
 // 批量删除邮箱
 router.post('/batch/delete', authMiddleware, deleteEmails);
+
+// 导出邮箱
+router.post('/export', authMiddleware, exportEmails);  // 添加路由
 
 export default router;

@@ -1,324 +1,361 @@
-import React, { useState } from 'react';
-import { Card, Input, Button, Select, Space, message, Tabs, Divider, Table, Tag, Upload } from 'antd';
-import { CloseOutlined, SearchOutlined, UploadOutlined, DownloadOutlined, CopyOutlined, DeleteOutlined } from '@ant-design/icons';
-import type { UploadFile } from 'antd';
-import * as XLSX from 'xlsx';
+import React, { useState, useEffect } from 'react';
+import { 
+  Card, 
+  Input, 
+  Button, 
+  Select, 
+  Space, 
+  message, 
+  Tabs, 
+  Table, 
+  Tag, 
+  Progress, 
+  Typography, 
+  Row, 
+  Col, 
+  Checkbox, 
+  Spin, 
+  InputNumber,
+  Modal
+} from 'antd';
+import { 
+  SearchOutlined, 
+  DownloadOutlined, 
+  CopyOutlined, 
+  PlayCircleOutlined, 
+  PauseCircleOutlined, 
+  StopOutlined,
+  LoadingOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  InfoCircleOutlined
+} from '@ant-design/icons';
+import { WhatsAppNumber } from '../types';
+import { 
+  getCollectionWebsites, 
+  getCollectionRegions, 
+  startCollection, 
+  pauseCollection, 
+  resumeCollection, 
+  stopCollection, 
+  getCollectionStatus, 
+  getCollectionResults, 
+  getCollectionLogs, 
+  exportCollectionResults 
+} from '../services/whatsapp';
 
 const { Option } = Select;
 const { TabPane } = Tabs;
+const { Title, Paragraph } = Typography;
 
-// WhatsApp号码类型
-interface WhatsAppNumber {
-  id: string;
-  number: string;
-  industry: string;
-  upload_time: string;
+// 采集任务状态类型
+type TaskStatus = 'pending' | 'running' | 'paused' | 'completed' | 'stopped' | 'failed';
+
+// 采集配置类型
+interface CollectionConfig {
+  regions: string[];
+  keywords: string[];
+  sources: string[];
+  pages: number;
+  delay?: number;
 }
 
-// 上传结果类型
-interface UploadResults {
-  existing: WhatsAppNumber[];
-  new: WhatsAppNumber[];
+// 采集进度类型
+interface CollectionProgress {
+  currentPage: number;
+  totalPages: number;
+  collectedNumbers: number;
+  processedSources: number;
+  totalSources: number;
+}
+
+// 结果统计类型
+interface ResultStats {
+  success: number;
+  failed: number;
+  duplicate: number;
+  total: number;
+}
+
+// 采集状态类型
+interface CollectionStatus {
+  taskId: string;
+  status: TaskStatus;
+  progress: CollectionProgress;
+  stats: ResultStats;
+  startedAt?: string;
+  completedAt?: string;
 }
 
 const WhatsAppNumberCollection: React.FC = () => {
-  // 搜索配置
-  const [countryCodeOption, setCountryCodeOption] = useState('manual');
-  const [manualCountryCode, setManualCountryCode] = useState('+86');
+  // 初始化状态
+  const [loading, setLoading] = useState(true);
+  const [websites, setWebsites] = useState<Array<{ value: string; label: string; url: string }>>([]);
+  const [regions, setRegions] = useState<Array<{ value: string; label: string; code: string }>>([]);
+  
+  // 采集配置
+  const [selectedRegions, setSelectedRegions] = useState<string[]>(['usa']);
   const [keywords, setKeywords] = useState('');
-  const [searchEngine, setSearchEngine] = useState('google_global');
-  const [searchPages, setSearchPages] = useState<string>('99');
-  const [searchUrl, setSearchUrl] = useState<string>('');
+  const [selectedSources, setSelectedSources] = useState<string[]>([]);
+  const [pages, setPages] = useState<number>(10);
+  const [delay, setDelay] = useState<number>(1000);
+  
+  // 采集任务状态
+  const [collectionStatus, setCollectionStatus] = useState<CollectionStatus | null>(null);
+  const [isCollecting, setIsCollecting] = useState(false);
+  const [logs, setLogs] = useState<string[]>([]);
   
   // 采集结果
-  const [collectedNumbers, setCollectedNumbers] = useState<string[]>([]);
+  const [collectionResults, setCollectionResults] = useState<WhatsAppNumber[]>([]);
+  const [totalResults, setTotalResults] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   
-  // 号码管理
-  const [numberInput, setNumberInput] = useState('');
-  const [fileList, setFileList] = useState<UploadFile[]>([]);
-  const [selectedIndustry, setSelectedIndustry] = useState('');
-  const [customIndustry, setCustomIndustry] = useState('');
-  const [uploadResults, setUploadResults] = useState<UploadResults | null>(null);
-  const [queryDate, setQueryDate] = useState(new Date().toISOString().split('T')[0]);
-  const [queryResults, setQueryResults] = useState<WhatsAppNumber[]>([]);
-  const [stats, setStats] = useState({ total: 0, industries: {} as Record<string, number> });
-
-  // 搜索引擎列表
-  const searchEngines = [
-    { value: 'google_global', label: 'Google(全球)' },
-    { value: 'google_usa', label: 'Google(美国)' },
-    { value: 'bing', label: 'Bing' },
-    { value: 'yahoo', label: 'Yahoo' },
-  ];
+  // 导出状态
+  const [exportLoading, setExportLoading] = useState(false);
   
-  // 行业列表
-  const industries = ['服装', '电子', '机械', '化工', '食品', '其他'];
-
-  // 处理开始搜索
-  const handleStartSearch = () => {
+  // 日志模态框
+  const [logsModalVisible, setLogsModalVisible] = useState(false);
+  
+  // 初始化数据
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      try {
+        setLoading(true);
+        const [websitesData, regionsData] = await Promise.all([
+          getCollectionWebsites(),
+          getCollectionRegions()
+        ]);
+        setWebsites(websitesData.data.websites);
+        setRegions(regionsData.data.regions);
+        message.success('初始化数据加载成功');
+      } catch (error) {
+        console.error('Failed to fetch initial data:', error);
+        message.error('初始化数据加载失败');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchInitialData();
+  }, []);
+  
+  // 定时更新采集状态
+  useEffect(() => {
+    let interval: number;
+    if (collectionStatus && isCollecting && ['running', 'paused'].includes(collectionStatus.status)) {
+      interval = setInterval(async () => {
+        try {
+          const statusData = await getCollectionStatus(collectionStatus.taskId);
+          setCollectionStatus(statusData.data);
+          
+          // 如果任务已完成或停止，取消定时更新
+          if (['completed', 'stopped', 'failed'].includes(statusData.data.status)) {
+            setIsCollecting(false);
+            message.success(`采集任务已${statusData.data.status}`);
+          }
+        } catch (error) {
+          console.error('Failed to update collection status:', error);
+        }
+      }, 2000);
+    }
+    return () => clearInterval(interval);
+  }, [collectionStatus, isCollecting]);
+  
+  // 开始采集
+  const handleStartCollection = async () => {
     try {
       // 验证输入
       if (!keywords.trim()) {
         message.error('请输入搜索关键词');
         return;
       }
-
-      // 构建搜索URL
-      let url = '';
-      const finalCountryCode = countryCodeOption === 'manual' ? manualCountryCode : countryCodeOption;
       
-      // 根据搜索引擎构建不同的URL
-      switch (searchEngine) {
-        case 'google_global':
-          url = `https://www.google.com/search?q=${encodeURIComponent(keywords + ' WhatsApp ' + finalCountryCode)}`;
-          break;
-        case 'google_usa':
-          url = `https://www.google.com/search?gl=us&q=${encodeURIComponent(keywords + ' WhatsApp ' + finalCountryCode)}`;
-          break;
-        case 'bing':
-          url = `https://www.bing.com/search?q=${encodeURIComponent(keywords + ' WhatsApp ' + finalCountryCode)}`;
-          break;
-        case 'yahoo':
-          url = `https://search.yahoo.com/search?p=${encodeURIComponent(keywords + ' WhatsApp ' + finalCountryCode)}`;
-          break;
-        default:
-          url = `https://www.google.com/search?q=${encodeURIComponent(keywords + ' WhatsApp ' + finalCountryCode)}`;
-      }
-
-      // 设置搜索URL，显示搜索结果
-      setSearchUrl(url);
-      // 清空之前的采集结果
-      setCollectedNumbers([]);
-      message.success('开始搜索...');
-    } catch (error) {
-      console.error('搜索错误:', error);
-      message.error('搜索失败，请重试');
-    }
-  };
-
-  // 关闭搜索结果
-  const handleCloseSearch = () => {
-    setSearchUrl('');
-    setCollectedNumbers([]);
-  };
-
-  // 处理文件上传
-  const processFile = (file: File): Promise<string[]> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      
-      if (file.name.endsWith('.txt')) {
-        reader.onload = (e) => {
-          const content = e.target?.result as string;
-          const numbers = content.split('\n')
-            .map(line => line.trim())
-            .filter(line => line);
-          resolve(numbers);
-        };
-        reader.readAsText(file);
-      } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-        reader.onload = (e) => {
-          try {
-            const data = new Uint8Array(e.target?.result as ArrayBuffer);
-            const workbook = XLSX.read(data, { type: 'array' });
-            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-            const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-            
-            const numbers = jsonData.map((row: any) => {
-              return Object.values(row)[0]?.toString().trim() || '';
-            }).filter((number: string) => number);
-            
-            resolve(numbers);
-          } catch (error) {
-            reject(error);
-          }
-        };
-        reader.readAsArrayBuffer(file);
-      } else {
-        reject(new Error('不支持的文件类型'));
-      }
-    });
-  };
-
-  // 获取行业
-  const getIndustry = () => {
-    return customIndustry || selectedIndustry || '其他';
-  };
-
-  // 处理号码上传
-  const handleUploadNumbers = async () => {
-    try {
-      let numbers: string[] = [];
-      
-      // 处理直接输入的号码
-      if (numberInput.trim()) {
-        numbers = numberInput.split('\n')
-          .map(line => line.trim())
-          .filter(line => line);
-      }
-      
-      // 处理上传的文件
-      if (fileList && fileList.length > 0) {
-        for (const file of fileList) {
-          if (file.originFileObj) {
-            const fileNumbers = await processFile(file.originFileObj);
-            numbers = [...new Set([...numbers, ...fileNumbers])];
-          }
-        }
-      }
-      
-      if (numbers.length === 0) {
-        message.error('请输入或上传WhatsApp号码');
+      if (selectedSources.length === 0) {
+        message.error('请选择至少一个采集来源');
         return;
       }
       
-      const industry = getIndustry();
+      setLoading(true);
       
-      // 模拟上传到后端
-      message.loading('正在上传号码...', 2);
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // 模拟上传结果
-      const mockUploadResults: UploadResults = {
-        existing: [
-          { id: '1', number: '+1234567890', industry: '服装', upload_time: new Date().toISOString() }
-        ],
-        new: numbers.slice(1).map((number, index) => ({
-          id: `new-${index}`,
-          number,
-          industry,
-          upload_time: new Date().toISOString()
-        }))
+      // 准备采集配置
+      const config: CollectionConfig = {
+        regions: selectedRegions,
+        keywords: keywords.split('\n').filter(keyword => keyword.trim()),
+        sources: selectedSources,
+        pages,
+        delay
       };
       
-      setUploadResults(mockUploadResults);
-      message.success('号码上传成功');
+      // 调用开始采集API
+      const response = await startCollection({
+        config
+      });
       
-      // 更新统计信息
-      updateStats();
+      const taskId = response.data.taskId;
+      message.success('采集任务已启动');
       
-      // 清空输入
-      setNumberInput('');
-      setFileList([]);
-      setSelectedIndustry('');
-      setCustomIndustry('');
+      // 初始化采集状态
+      setCollectionStatus({
+        taskId,
+        status: 'running',
+        progress: {
+          currentPage: 0,
+          totalPages: pages,
+          collectedNumbers: 0,
+          processedSources: 0,
+          totalSources: selectedSources.length
+        },
+        stats: {
+          success: 0,
+          failed: 0,
+          duplicate: 0,
+          total: 0
+        },
+        startedAt: new Date().toISOString()
+      });
+      
+      setIsCollecting(true);
+      setLogs([`采集任务已启动 - ${new Date().toISOString()}`]);
+      
+      // 清空之前的采集结果
+      setCollectionResults([]);
+      setTotalResults(0);
     } catch (error) {
-      console.error('上传号码错误:', error);
-      message.error('上传号码失败，请重试');
+      console.error('Failed to start collection:', error);
+      message.error('采集任务启动失败');
+    } finally {
+      setLoading(false);
     }
   };
-
-  // 下载模板
-  const handleDownloadTemplate = () => {
+  
+  // 暂停采集
+  const handlePauseCollection = async () => {
+    if (!collectionStatus) return;
+    
     try {
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet([{ 'WhatsApp号码': '1234567890' }]);
-      XLSX.utils.book_append_sheet(wb, ws, 'WhatsApp号码');
+      await pauseCollection(collectionStatus.taskId);
+      setCollectionStatus(prev => prev ? { ...prev, status: 'paused' } : null);
+      message.success('采集任务已暂停');
+      setLogs(prev => [...prev, `采集任务已暂停 - ${new Date().toISOString()}`]);
+    } catch (error) {
+      console.error('Failed to pause collection:', error);
+      message.error('采集任务暂停失败');
+    }
+  };
+  
+  // 继续采集
+  const handleResumeCollection = async () => {
+    if (!collectionStatus) return;
+    
+    try {
+      await resumeCollection(collectionStatus.taskId);
+      setCollectionStatus(prev => prev ? { ...prev, status: 'running' } : null);
+      message.success('采集任务已继续');
+      setLogs(prev => [...prev, `采集任务已继续 - ${new Date().toISOString()}`]);
+    } catch (error) {
+      console.error('Failed to resume collection:', error);
+      message.error('采集任务继续失败');
+    }
+  };
+  
+  // 停止采集
+  const handleStopCollection = async () => {
+    if (!collectionStatus) return;
+    
+    try {
+      await stopCollection(collectionStatus.taskId);
+      setCollectionStatus(prev => prev ? { ...prev, status: 'stopped' } : null);
+      setIsCollecting(false);
+      message.success('采集任务已停止');
+      setLogs(prev => [...prev, `采集任务已停止 - ${new Date().toISOString()}`]);
+    } catch (error) {
+      console.error('Failed to stop collection:', error);
+      message.error('采集任务停止失败');
+    }
+  };
+  
+  // 获取采集结果
+  const fetchCollectionResults = async () => {
+    if (!collectionStatus) return;
+    
+    try {
+      setLoading(true);
+      const response = await getCollectionResults(collectionStatus.taskId, {
+        page: currentPage,
+        limit: pageSize
+      });
+      setCollectionResults(response.data.numbers);
+      setTotalResults(response.data.pagination.total);
+      message.success(`获取到 ${response.data.numbers.length} 条采集结果`);
+    } catch (error) {
+      console.error('Failed to fetch collection results:', error);
+      message.error('获取采集结果失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // 获取采集日志
+  const fetchCollectionLogs = async () => {
+    if (!collectionStatus) return;
+    
+    try {
+      setLoading(true);
+      const response = await getCollectionLogs(collectionStatus.taskId);
+      setLogs(response.data.logs);
+      message.success('获取采集日志成功');
+      setLogsModalVisible(true);
+    } catch (error) {
+      console.error('Failed to fetch collection logs:', error);
+      message.error('获取采集日志失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // 导出采集结果
+  const handleExportResults = async (format: 'excel' | 'csv') => {
+    if (!collectionStatus) return;
+    
+    try {
+      setExportLoading(true);
+      const response = await exportCollectionResults(collectionStatus.taskId, format);
       
-      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-      const blob = new Blob([wbout], { type: 'application/octet-stream' });
-      const url = URL.createObjectURL(blob);
-      
+      // 创建下载链接
       const link = document.createElement('a');
-      link.href = url;
-      link.download = 'whatsapp_template.xlsx';
+      link.href = response.data.fileUrl;
+      link.download = response.data.fileName;
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
       
-      URL.revokeObjectURL(url);
-      message.success('模板下载成功');
+      message.success(`导出${format === 'excel' ? 'Excel' : 'CSV'}文件成功`);
     } catch (error) {
-      console.error('下载模板错误:', error);
-      message.error('下载模板失败，请重试');
+      console.error('Failed to export collection results:', error);
+      message.error('导出采集结果失败');
+    } finally {
+      setExportLoading(false);
     }
   };
-
-  // 处理号码查询
-  const handleQueryNumbers = async () => {
-    try {
-      // 模拟查询
-      message.loading('正在查询号码...', 1.5);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // 模拟查询结果
-      const mockQueryResults: WhatsAppNumber[] = [
-        { id: '1', number: '+1234567890', industry: '服装', upload_time: new Date().toISOString() },
-        { id: '2', number: '+9876543210', industry: '电子', upload_time: new Date().toISOString() },
-        { id: '3', number: '+8613800138000', industry: '机械', upload_time: new Date().toISOString() }
-      ];
-      
-      setQueryResults(mockQueryResults);
-      message.success(`查询到 ${mockQueryResults.length} 个号码`);
-    } catch (error) {
-      console.error('查询号码错误:', error);
-      message.error('查询号码失败，请重试');
-    }
-  };
-
-  // 更新统计信息
-  const updateStats = () => {
-    // 模拟统计信息
-    const mockStats = {
-      total: 100,
-      industries: {
-        '服装': 30,
-        '电子': 25,
-        '机械': 20,
-        '化工': 15,
-        '食品': 10
-      }
-    };
-    setStats(mockStats);
-  };
-
+  
   // 复制到剪贴板
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
       message.success('已复制到剪贴板');
+    }).catch(() => {
+      message.error('复制失败');
     });
   };
-
-  // 复制所有号码
-  const copyAllNumbers = (numbers: WhatsAppNumber[]) => {
-    const text = numbers.map(num => num.number).join('\n');
-    copyToClipboard(text);
+  
+  // 复制单个号码
+  const copyNumber = (number: string) => {
+    copyToClipboard(number);
   };
-
-  // 从iframe中采集号码
-  const handleCollectNumbers = async () => {
-    try {
-      // 真实场景中，这里应该实现从iframe中提取号码的逻辑
-      // 由于浏览器的同源策略，直接访问iframe内容会受限
-      // 以下是模拟采集，实际项目中需要使用其他方式实现
-      
-      // 模拟搜索和采集过程
-      message.loading('正在采集号码...', 2);
-      
-      // 模拟从搜索结果中提取号码
-      const extractNumbersFromSearchResults = () => {
-        // 模拟从搜索结果中提取的号码
-        const mockExtractedNumbers = [
-          '+1234567890',
-          '+9876543210',
-          '+8613800138000',
-          '+447123456789',
-          '+61412345678',
-          '+85212345678',
-          '+886912345678',
-          '+34612345678'
-        ];
-        return mockExtractedNumbers;
-      };
-      
-      // 延迟模拟网络请求
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      const extractedNumbers = extractNumbersFromSearchResults();
-      setCollectedNumbers(extractedNumbers);
-      message.success(`成功采集到 ${extractedNumbers.length} 个号码`);
-    } catch (error) {
-      console.error('采集号码错误:', error);
-      message.error('采集号码失败，请重试');
-    }
+  
+  // 复制所有号码
+  const copyAllNumbers = () => {
+    const allNumbers = collectionResults.map(item => item.number).join('\n');
+    copyToClipboard(allNumbers);
   };
   
   // 表格列配置
@@ -328,18 +365,33 @@ const WhatsAppNumberCollection: React.FC = () => {
       dataIndex: 'number',
       key: 'number',
       render: (number: string) => <strong>{number}</strong>,
+      ellipsis: true
     },
     {
       title: '所属行业',
       dataIndex: 'industry',
       key: 'industry',
       render: (industry: string) => <Tag color="blue">{industry}</Tag>,
+      ellipsis: true
+    },
+    {
+      title: '关键词',
+      dataIndex: 'keyword',
+      key: 'keyword',
+      ellipsis: true
+    },
+    {
+      title: '来源平台',
+      dataIndex: 'platform',
+      key: 'platform',
+      ellipsis: true
     },
     {
       title: '上传时间',
-      dataIndex: 'upload_time',
-      key: 'upload_time',
+      dataIndex: 'uploadTime',
+      key: 'uploadTime',
       render: (time: string) => new Date(time).toLocaleString(),
+      ellipsis: true
     },
     {
       title: '操作',
@@ -349,535 +401,488 @@ const WhatsAppNumberCollection: React.FC = () => {
           <Button 
             type="text" 
             icon={<CopyOutlined />} 
-            onClick={() => copyToClipboard(record.number)}
+            onClick={() => copyNumber(record.number)}
           >
             复制
-          </Button>
-          <Button 
-            type="text" 
-            danger 
-            icon={<DeleteOutlined />} 
-          >
-            删除
           </Button>
         </Space>
       ),
     },
   ];
-
+  
+  // 获取状态图标
+  const getStatusIcon = (status: TaskStatus) => {
+    switch (status) {
+      case 'running':
+        return <LoadingOutlined style={{ color: '#1890ff' }} />;
+      case 'paused':
+        return <PauseCircleOutlined style={{ color: '#faad14' }} />;
+      case 'completed':
+        return <CheckCircleOutlined style={{ color: '#52c41a' }} />;
+      case 'stopped':
+      case 'failed':
+        return <CloseCircleOutlined style={{ color: '#ff4d4f' }} />;
+      case 'pending':
+      default:
+        return <InfoCircleOutlined style={{ color: '#1890ff' }} />;
+    }
+  };
+  
+  // 获取状态文本
+  const getStatusText = (status: TaskStatus) => {
+    switch (status) {
+      case 'running':
+        return '运行中';
+      case 'paused':
+        return '已暂停';
+      case 'completed':
+        return '已完成';
+      case 'stopped':
+        return '已停止';
+      case 'failed':
+        return '失败';
+      case 'pending':
+      default:
+        return '待处理';
+    }
+  };
+  
+  // 获取状态颜色
+  const getStatusColor = (status: TaskStatus) => {
+    switch (status) {
+      case 'running':
+        return '#1890ff';
+      case 'paused':
+        return '#faad14';
+      case 'completed':
+        return '#52c41a';
+      case 'stopped':
+      case 'failed':
+        return '#ff4d4f';
+      case 'pending':
+      default:
+        return '#1890ff';
+    }
+  };
+  
   return (
     <div style={{ 
       padding: '20px', 
       backgroundColor: '#f0f2f5', 
       minHeight: '100vh'
     }}>
-      <h2 style={{ marginBottom: '20px', textAlign: 'center', color: '#1f2937' }}>WhatsApp号码采集器</h2>
+      <Title level={2} style={{ 
+        marginBottom: '20px', 
+        textAlign: 'center', 
+        color: '#1f2937' 
+      }}>WhatsApp号码采集器</Title>
       
-      <Tabs defaultActiveKey="1" style={{ maxWidth: 1000, margin: '0 auto' }}>
-        {/* 号码采集标签页 */}
-        <TabPane tab="号码采集" key="1">
-          <Space direction="vertical" size="large" style={{ width: '100%' }}>
-            {/* 搜索配置卡片 */}
-            <Card 
-              style={{ 
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                borderRadius: '8px'
-              }}
-            >
-              <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                {/* 国家/地区区号 */}
-                <Space.Compact style={{ width: '100%' }}>
-                  <Select
-                    placeholder="手动输入"
-                    value={countryCodeOption}
-                    onChange={setCountryCodeOption}
-                    style={{ width: '50%' }}
-                  >
-                    <Option value="manual">手动输入</Option>
-                    <Option value="+86">中国 (+86)</Option>
-                    <Option value="+1">美国 (+1)</Option>
-                    <Option value="+44">英国 (+44)</Option>
-                    <Option value="+61">澳大利亚 (+61)</Option>
-                  </Select>
-                  <Input
-                    placeholder="手动输入区号，如+86"
-                    value={manualCountryCode}
-                    onChange={(e) => setManualCountryCode(e.target.value)}
-                    style={{ width: '50%' }}
-                  />
-                </Space.Compact>
-
-                {/* 关键词 */}
-                <div>
-                  <Input
-                    placeholder="输入要搜索的关键词，如：餐厅 WhatsApp"
-                    value={keywords}
-                    onChange={(e) => setKeywords(e.target.value)}
-                    style={{ width: '100%' }}
-                  />
-                </div>
-
-                {/* 搜索引擎和搜索页数 */}
-                <Space.Compact style={{ width: '100%' }}>
-                  <Select
-                    placeholder="选择搜索引擎"
-                    value={searchEngine}
-                    onChange={setSearchEngine}
-                    style={{ width: '50%' }}
-                  >
-                    {searchEngines.map(engine => (
-                      <Option key={engine.value} value={engine.value}>{engine.label}</Option>
-                    ))}
-                  </Select>
-                  <Input
-                    placeholder="搜索页数"
-                    value={searchPages}
-                    onChange={(e) => setSearchPages(e.target.value)}
-                    style={{ width: '50%' }}
-                  />
-                </Space.Compact>
-
-                {/* 开始搜索按钮 */}
-                <Button 
-                  type="primary" 
-                  onClick={handleStartSearch} 
-                  style={{ 
-                    width: '100%', 
-                    height: '48px',
-                    fontSize: '18px',
-                    fontWeight: 'bold',
-                    backgroundColor: '#52c41a',
-                    borderColor: '#52c41a',
-                    borderRadius: '4px'
-                  }}
-                  icon={<SearchOutlined />}
-                >
-                  开始搜索
-                </Button>
-              </Space>
-            </Card>
-
-            {/* 搜索结果和号码采集 */}
-            {searchUrl && (
+      <Spin spinning={loading} tip="加载中...">
+        <Tabs 
+          defaultActiveKey="1" 
+          style={{ maxWidth: 1200, margin: '0 auto' }}
+          tabBarStyle={{ marginBottom: '20px' }}
+        >
+          {/* 号码采集标签页 */}
+          <TabPane tab="号码采集" key="1">
+            <Space direction="vertical" size="large" style={{ width: '100%' }}>
+              {/* 采集配置卡片 */}
               <Card 
                 style={{ 
                   boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
                   borderRadius: '8px'
                 }}
-                title={
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>搜索结果</span>
-                    <Button 
-                      type="text" 
-                      danger 
-                      icon={<CloseOutlined />} 
-                      onClick={handleCloseSearch}
-                    >
-                      关闭搜索
-                    </Button>
-                  </div>
-                }
+                title={<span style={{ fontSize: '16px', fontWeight: 'bold' }}>采集配置</span>}
               >
-                <Tabs defaultActiveKey="1">
-                  {/* 搜索结果 */}
-              <TabPane tab="搜索页面" key="1">
-                <div style={{ height: '600px', width: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '20px', textAlign: 'center' }}>
-                  <h3 style={{ marginBottom: '16px', color: '#1f2937' }}>搜索结果无法直接嵌入</h3>
-                  <p style={{ marginBottom: '24px', color: '#666' }}>由于 Google 等搜索引擎的安全限制，无法在 iframe 中直接显示搜索结果。</p>
-                  <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: '#f0f2f5', borderRadius: '8px', maxWidth: '500px' }}>
-                    <p style={{ marginBottom: '8px', fontWeight: 'bold' }}>搜索配置：</p>
-                    <p>关键词：{keywords}</p>
-                    <p>国家/地区区号：{countryCodeOption === 'manual' ? manualCountryCode : countryCodeOption}</p>
-                    <p>搜索引擎：{searchEngines.find(engine => engine.value === searchEngine)?.label}</p>
-                    <p>搜索页数：{searchPages}</p>
+                <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                  {/* 地区选择 */}
+                  <div>
+                    <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>目标地区</div>
+                    <Select
+                      mode="multiple"
+                      placeholder="选择目标地区"
+                      value={selectedRegions}
+                      onChange={setSelectedRegions}
+                      style={{ width: '100%' }}
+                      maxTagCount={3}
+                    >
+                      {regions.map(region => (
+                        <Option key={region.value} value={region.value}>
+                          {region.label} ({region.code})
+                        </Option>
+                      ))}
+                    </Select>
                   </div>
-                  <Space size="middle">
-                    <Button 
-                      type="primary" 
-                      onClick={() => window.open(searchUrl, '_blank')}
-                    >
-                      在新标签页打开搜索
-                    </Button>
-                    <Button 
-                      type="default" 
-                      onClick={handleCollectNumbers}
-                    >
-                      开始采集号码
-                    </Button>
-                  </Space>
-                </div>
-              </TabPane>
-                  
-                  {/* 采集结果 */}
-                  <TabPane tab={`采集结果 (${collectedNumbers.length})`} key="2">
-                    <div style={{ 
-                      maxHeight: '600px', 
-                      overflowY: 'auto',
-                      border: '1px solid #d9d9d9', 
-                      borderRadius: '4px',
-                      padding: '16px'
-                    }}>
-                      {collectedNumbers.length > 0 ? (
-                        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                          {collectedNumbers.map((number, index) => (
-                            <div key={index} style={{ 
-                              display: 'flex', 
-                              justifyContent: 'space-between', 
-                              alignItems: 'center',
-                              padding: '8px 12px',
-                              backgroundColor: '#fafafa',
-                              borderRadius: '4px',
-                              border: '1px solid #e8e8e8'
-                            }}>
-                              <span>{number}</span>
-                              <Button 
-                                type="text" 
-                                size="small"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(number);
-                                  message.success('已复制到剪贴板');
-                                }}
-                              >
-                                复制
-                              </Button>
-                            </div>
-                          ))}
-                        </Space>
-                      ) : (
-                        <div style={{ 
-                          textAlign: 'center', 
-                          padding: '40px 0',
-                          color: '#999'
-                        }}>
-                          暂未采集到号码，请先点击"开始采集号码"
-                        </div>
-                      )}
-                    </div>
-                    {collectedNumbers.length > 0 && (
-                      <Divider />
-                    )}
-                    {collectedNumbers.length > 0 && (
-                      <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-                        <div style={{ color: '#666' }}>
-                          共采集到 {collectedNumbers.length} 个号码
-                        </div>
+
+                  {/* 关键词输入 */}
+                  <div>
+                    <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>搜索关键词</div>
+                    <Input.TextArea
+                      placeholder="输入搜索关键词，每行一个"
+                      value={keywords}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setKeywords(e.target.value)}
+                      rows={4}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+
+                  {/* 采集来源选择 */}
+                  <div>
+                    <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>采集来源</div>
+                    <Checkbox.Group 
+                      options={websites.map(website => ({
+                        label: website.label,
+                        value: website.value
+                      }))}
+                      value={selectedSources}
+                      onChange={setSelectedSources}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+
+                  {/* 采集配置 */}
+                  <Row gutter={16}>
+                    <Col span={12}>
+                      <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>采集页数</div>
+                      <InputNumber
+                        min={1}
+                        max={100}
+                        value={pages}
+                        onChange={(value) => value !== null && setPages(value)}
+                        style={{ width: '100%' }}
+                        placeholder="输入采集页数"
+                      />
+                    </Col>
+                    <Col span={12}>
+                      <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>延迟时间(ms)</div>
+                      <InputNumber
+                        min={500}
+                        max={10000}
+                        step={500}
+                        value={delay}
+                        onChange={(value) => value !== null && setDelay(value)}
+                        style={{ width: '100%' }}
+                        placeholder="输入延迟时间"
+                      />
+                    </Col>
+                  </Row>
+
+                  {/* 开始采集按钮 */}
+                  <Button 
+                    type="primary" 
+                    onClick={handleStartCollection} 
+                    style={{ 
+                      width: '100%', 
+                      height: '48px',
+                      fontSize: '16px',
+                      fontWeight: 'bold',
+                      backgroundColor: '#52c41a',
+                      borderColor: '#52c41a',
+                      borderRadius: '4px'
+                    }}
+                    icon={<SearchOutlined />}
+                    disabled={isCollecting}
+                  >
+                    开始采集
+                  </Button>
+                </Space>
+              </Card>
+
+              {/* 采集状态和控制 */}
+              {collectionStatus && (
+                <Card 
+                  style={{ 
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                    borderRadius: '8px'
+                  }}
+                  title={<span style={{ fontSize: '16px', fontWeight: 'bold' }}>采集状态</span>}
+                >
+                  <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                    {/* 基本状态信息 */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Space>
+                        <span style={{ fontSize: '14px', fontWeight: 'bold' }}>任务状态:</span>
+                        <Tag 
+                          color={getStatusColor(collectionStatus.status)} 
+                          icon={getStatusIcon(collectionStatus.status)}
+                        >
+                          {getStatusText(collectionStatus.status)}
+                        </Tag>
+                      </Space>
+                      <Space>
                         <Button 
-                          type="default"
-                          onClick={() => {
-                            const allNumbers = collectedNumbers.join('\n');
-                            navigator.clipboard.writeText(allNumbers);
-                            message.success('已复制全部号码到剪贴板');
-                          }}
+                          type="primary"
+                          icon={<PlayCircleOutlined />}
+                          onClick={handleResumeCollection}
+                          disabled={collectionStatus.status !== 'paused'}
+                        >
+                          继续
+                        </Button>
+                        <Button 
+                          icon={<PauseCircleOutlined />}
+                          onClick={handlePauseCollection}
+                          disabled={collectionStatus.status !== 'running'}
+                        >
+                          暂停
+                        </Button>
+                        <Button 
+                          danger
+                          icon={<StopOutlined />}
+                          onClick={handleStopCollection}
+                          disabled={['completed', 'stopped', 'failed'].includes(collectionStatus.status)}
+                        >
+                          停止
+                        </Button>
+                      </Space>
+                    </div>
+                    
+                    {/* 采集进度 */}
+                    <div>
+                      <div style={{ marginBottom: '8px', fontSize: '14px', fontWeight: 'bold' }}>采集进度</div>
+                      <div style={{ marginBottom: '16px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <span>总进度</span>
+                          <span>{Math.round((collectionStatus.progress.currentPage / collectionStatus.progress.totalPages) * 100)}%</span>
+                        </div>
+                        <Progress 
+                          percent={Math.round((collectionStatus.progress.currentPage / collectionStatus.progress.totalPages) * 100)} 
+                          status="active" 
+                        />
+                      </div>
+                      
+                      <Row gutter={16}>
+                        <Col span={12}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <span>已采集号码</span>
+                            <span>{collectionStatus.progress.collectedNumbers}</span>
+                          </div>
+                          <Progress 
+                            percent={Math.round((collectionStatus.progress.collectedNumbers / (collectionStatus.progress.totalPages * 20)) * 100)} 
+                            status="active" 
+                            strokeColor="#52c41a"
+                          />
+                        </Col>
+                        <Col span={12}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <span>已处理来源</span>
+                            <span>{collectionStatus.progress.processedSources}/{collectionStatus.progress.totalSources}</span>
+                          </div>
+                          <Progress 
+                            percent={Math.round((collectionStatus.progress.processedSources / collectionStatus.progress.totalSources) * 100)} 
+                            status="active" 
+                            strokeColor="#1890ff"
+                          />
+                        </Col>
+                      </Row>
+                    </div>
+                    
+                    {/* 结果统计 */}
+                    <div>
+                      <div style={{ marginBottom: '8px', fontSize: '14px', fontWeight: 'bold' }}>结果统计</div>
+                      <Row gutter={16}>
+                        <Col span={6}>
+                          <div style={{ textAlign: 'center', padding: '12px', backgroundColor: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: '4px' }}>
+                            <div style={{ fontSize: '12px', color: '#52c41a', marginBottom: '4px' }}>成功</div>
+                            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#389e0d' }}>{collectionStatus.stats.success}</div>
+                          </div>
+                        </Col>
+                        <Col span={6}>
+                          <div style={{ textAlign: 'center', padding: '12px', backgroundColor: '#fff1f0', border: '1px solid #ffccc7', borderRadius: '4px' }}>
+                            <div style={{ fontSize: '12px', color: '#ff4d4f', marginBottom: '4px' }}>失败</div>
+                            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#cf1322' }}>{collectionStatus.stats.failed}</div>
+                          </div>
+                        </Col>
+                        <Col span={6}>
+                          <div style={{ textAlign: 'center', padding: '12px', backgroundColor: '#f0f5ff', border: '1px solid #adc6ff', borderRadius: '4px' }}>
+                            <div style={{ fontSize: '12px', color: '#1890ff', marginBottom: '4px' }}>重复</div>
+                            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1890ff' }}>{collectionStatus.stats.duplicate}</div>
+                          </div>
+                        </Col>
+                        <Col span={6}>
+                          <div style={{ textAlign: 'center', padding: '12px', backgroundColor: '#fffbe6', border: '1px solid #ffe58f', borderRadius: '4px' }}>
+                            <div style={{ fontSize: '12px', color: '#faad14', marginBottom: '4px' }}>总计</div>
+                            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#d48806' }}>{collectionStatus.stats.total}</div>
+                          </div>
+                        </Col>
+                      </Row>
+                    </div>
+                    
+                    {/* 操作按钮 */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <Space>
+                        <Button onClick={fetchCollectionLogs}>
+                          查看日志
+                        </Button>
+                        <Button 
+                          type="primary"
+                          onClick={fetchCollectionResults}
+                        >
+                          查看结果
+                        </Button>
+                      </Space>
+                    </div>
+                  </Space>
+                </Card>
+              )}
+
+              {/* 采集结果 */}
+              {collectionResults.length > 0 && (
+                <Card 
+                  style={{ 
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                    borderRadius: '8px'
+                  }}
+                  title={
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '16px', fontWeight: 'bold' }}>采集结果</span>
+                      <Space>
+                        <Button 
+                          icon={<CopyOutlined />}
+                          onClick={copyAllNumbers}
                         >
                           复制全部号码
                         </Button>
+                        <Button 
+                          icon={<DownloadOutlined />}
+                          onClick={() => handleExportResults('excel')}
+                          loading={exportLoading}
+                        >
+                          导出Excel
+                        </Button>
+                        <Button 
+                          icon={<DownloadOutlined />}
+                          onClick={() => handleExportResults('csv')}
+                          loading={exportLoading}
+                        >
+                          导出CSV
+                        </Button>
                       </Space>
-                    )}
-                  </TabPane>
-                </Tabs>
-              </Card>
-            )}
-          </Space>
-        </TabPane>
-        
-        {/* 号码管理标签页 */}
-        <TabPane tab="号码管理" key="2">
-          <Space direction="vertical" size="large" style={{ width: '100%' }}>
-            {/* 上传号码卡片 */}
-            <Card 
-              title="上传WhatsApp号码" 
-              style={{ 
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                borderRadius: '8px'
-              }}
-            >
-              <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                {/* 直接输入号码 */}
-                <div>
-                  <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>直接输入/粘贴号码（一行一个）</div>
-                  <textarea 
-                    value={numberInput}
-                    onChange={(e) => setNumberInput(e.target.value)}
-                    placeholder="例如：\n+1234567890\n+9876543210"
-                    style={{ 
-                      width: '100%', 
-                      height: '120px', 
-                      padding: '12px', 
-                      border: '1px solid #d9d9d9', 
-                      borderRadius: '4px',
-                      resize: 'vertical',
-                      fontSize: '14px',
-                      fontFamily: 'inherit'
-                    }}
-                  />
-                </div>
-                
-                {/* 上传文件 */}
-                <div>
-                  <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>上传文件</div>
-                  <Space>
-                    <Upload
-                      beforeUpload={(file) => {
-                        const isTxt = file.name.endsWith('.txt') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
-                        if (!isTxt) {
-                          message.error('仅支持 txt、xlsx 和 xls 文件');
-                        }
-                        return isTxt;
-                      }}
-                      fileList={fileList}
-                      onChange={({ fileList: newFileList }) => setFileList(newFileList)}
-                      accept=".txt,.xlsx,.xls"
-                      showUploadList={{
-                        showRemoveIcon: true,
-                        showPreviewIcon: false,
-                      }}
-                    >
-                      <Button icon={<UploadOutlined />}>选择文件</Button>
-                    </Upload>
-                    <Button 
-                      type="default" 
-                      icon={<DownloadOutlined />} 
-                      onClick={handleDownloadTemplate}
-                    >
-                      下载模板
-                    </Button>
-                  </Space>
-                </div>
-                
-                {/* 号码所属行业 */}
-                <div>
-                  <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>号码所属行业</div>
-                  <Space.Compact style={{ width: '100%' }}>
-                    <Select
-                      placeholder="选择行业"
-                      value={selectedIndustry}
-                      onChange={setSelectedIndustry}
-                      style={{ width: '50%' }}
-                    >
-                      {industries.map(industry => (
-                        <Option key={industry} value={industry}>{industry}</Option>
-                      ))}
-                    </Select>
-                    <Input
-                      placeholder="或手动输入行业"
-                      value={customIndustry}
-                      onChange={(e) => setCustomIndustry(e.target.value)}
-                      style={{ width: '50%' }}
-                    />
-                  </Space.Compact>
-                </div>
-                
-                {/* 开始上传按钮 */}
-                <Button 
-                  type="primary" 
-                  onClick={handleUploadNumbers}
-                  style={{ width: '100%', height: '48px' }}
+                    </div>
+                  }
                 >
-                  开始上传
-                </Button>
-                
-                {/* 统计信息 */}
-                <div style={{ 
-                  padding: '16px', 
-                  backgroundColor: '#f5f5f5', 
-                  borderRadius: '4px',
-                  border: '1px solid #e8e8e8'
-                }}>
-                  <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>统计信息</div>
-                  <div style={{ marginBottom: '4px' }}>总存储号码数: {stats.total}</div>
-                  <div style={{ marginBottom: '4px', fontWeight: 'bold' }}>行业分布:</div>
-                  <div style={{ marginLeft: '16px' }}>
-                    {Object.entries(stats.industries).map(([industry, count]) => (
-                      <div key={industry} style={{ marginBottom: '2px' }}>
-                        {industry}: {count}个
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </Space>
-            </Card>
-            
-            {/* 上传结果 */}
-            {uploadResults && (
-              <Card 
-                title="上传结果" 
-                style={{ 
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                  borderRadius: '8px'
-                }}
-              >
-                <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                  {/* 已存在号码 */}
-                  <div>
-                    <div style={{ 
-                      display: 'flex', 
-                      justifyContent: 'space-between', 
-                      alignItems: 'center',
-                      marginBottom: '16px'
-                    }}>
-                      <h3 style={{ margin: 0 }}>已存在号码 ({uploadResults.existing.length})</h3>
-                      <Button 
-                        type="text" 
-                        icon={<CopyOutlined />} 
-                        onClick={() => copyAllNumbers(uploadResults.existing)}
-                      >
-                        复制全部
-                      </Button>
-                    </div>
-                    <div style={{ 
-                      maxHeight: '300px', 
-                      overflowY: 'auto',
-                      border: '1px solid #d9d9d9', 
-                      borderRadius: '4px',
-                      padding: '16px'
-                    }}>
-                      {uploadResults.existing.length > 0 ? (
-                        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                          {uploadResults.existing.map((num) => (
-                            <div key={num.id} style={{ 
-                              display: 'flex', 
-                              justifyContent: 'space-between', 
-                              alignItems: 'center',
-                              padding: '8px 12px',
-                              backgroundColor: '#fafafa',
-                              borderRadius: '4px',
-                              border: '1px solid #e8e8e8'
-                            }}>
-                              <div>
-                                <div>{num.number}</div>
-                                <div style={{ fontSize: '12px', color: '#666' }}>
-                                  行业: {num.industry} | 上传时间: {new Date(num.upload_time).toLocaleString()}
-                                </div>
-                              </div>
-                              <Button 
-                                type="text" 
-                                size="small"
-                                onClick={() => copyToClipboard(num.number)}
-                              >
-                                复制
-                              </Button>
-                            </div>
-                          ))}
-                        </Space>
-                      ) : (
-                        <div style={{ textAlign: 'center', color: '#999', padding: '20px' }}>
-                          没有已存在的号码
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {/* 新上传号码 */}
-                  <div>
-                    <div style={{ 
-                      display: 'flex', 
-                      justifyContent: 'space-between', 
-                      alignItems: 'center',
-                      marginBottom: '16px'
-                    }}>
-                      <h3 style={{ margin: 0 }}>新上传号码 ({uploadResults.new.length})</h3>
-                      <Button 
-                        type="text" 
-                        icon={<CopyOutlined />} 
-                        onClick={() => copyAllNumbers(uploadResults.new)}
-                      >
-                        复制全部
-                      </Button>
-                    </div>
-                    <div style={{ 
-                      maxHeight: '300px', 
-                      overflowY: 'auto',
-                      border: '1px solid #d9d9d9', 
-                      borderRadius: '4px',
-                      padding: '16px'
-                    }}>
-                      {uploadResults.new.length > 0 ? (
-                        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                          {uploadResults.new.map((num) => (
-                            <div key={num.id} style={{ 
-                              display: 'flex', 
-                              justifyContent: 'space-between', 
-                              alignItems: 'center',
-                              padding: '8px 12px',
-                              backgroundColor: '#fafafa',
-                              borderRadius: '4px',
-                              border: '1px solid #e8e8e8'
-                            }}>
-                              <div>
-                                <div>{num.number}</div>
-                                <div style={{ fontSize: '12px', color: '#666' }}>
-                                  行业: {num.industry} | 上传时间: {new Date(num.upload_time).toLocaleString()}
-                                </div>
-                              </div>
-                              <Button 
-                                type="text" 
-                                size="small"
-                                onClick={() => copyToClipboard(num.number)}
-                              >
-                                复制
-                              </Button>
-                            </div>
-                          ))}
-                        </Space>
-                      ) : (
-                        <div style={{ textAlign: 'center', color: '#999', padding: '20px' }}>
-                          没有新上传的号码
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </Space>
-              </Card>
-            )}
-            
-            {/* 查询号码 */}
-            <Card 
-              title="查询号码" 
-              style={{ 
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                borderRadius: '8px'
-              }}
-            >
-              <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                {/* 查询日期 */}
-                <Space>
-                  <div style={{ fontWeight: 'bold', marginRight: '8px' }}>选择日期:</div>
-                  <input 
-                    type="date" 
-                    value={queryDate}
-                    onChange={(e) => setQueryDate(e.target.value)}
-                    style={{ 
-                      padding: '6px 12px', 
-                      border: '1px solid #d9d9d9', 
-                      borderRadius: '4px',
-                      fontSize: '14px'
-                    }}
-                  />
-                  <Button 
-                    type="primary" 
-                    icon={<SearchOutlined />} 
-                    onClick={handleQueryNumbers}
-                  >
-                    查询
-                  </Button>
-                </Space>
-                
-                {/* 查询结果 */}
-                <div>
-                  <h3 style={{ marginBottom: '16px' }}>查询结果 ({queryResults.length}个号码)</h3>
                   <Table
                     columns={columns}
-                    dataSource={queryResults}
-                    rowKey="id"
-                    pagination={{ pageSize: 10 }}
-                    style={{ border: '1px solid #d9d9d9', borderRadius: '4px' }}
+                    dataSource={collectionResults}
+                    rowKey="_id"
+                    pagination={{
+                      current: currentPage,
+                      pageSize: pageSize,
+                      total: totalResults,
+                      onChange: (page, size) => {
+                        setCurrentPage(page);
+                        setPageSize(size);
+                        fetchCollectionResults();
+                      },
+                      showSizeChanger: true,
+                      pageSizeOptions: ['10', '20', '50', '100'],
+                      showTotal: (total) => `共 ${total} 条记录`
+                    }}
+                    scroll={{ x: 800 }}
                   />
+                </Card>
+              )}
+            </Space>
+          </TabPane>
+          
+          {/* 使用说明标签页 */}
+          <TabPane tab="使用说明" key="2">
+            <Card 
+              style={{ 
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                borderRadius: '8px'
+              }}
+            >
+              <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                <Title level={3}>功能介绍</Title>
+                <Paragraph>
+                  WhatsApp号码采集器是一个用于自动从指定网站采集WhatsApp号码的工具。
+                  您可以通过设置目标地区、搜索关键词和采集来源，实现自动化的号码采集。
+                </Paragraph>
+                
+                <Title level={3}>使用步骤</Title>
+                <div style={{ paddingLeft: '20px' }}>
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>1. 配置采集参数</div>
+                    <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                      <li>选择目标地区：可选择多个国家或地区</li>
+                      <li>输入搜索关键词：每行输入一个关键词，支持多个关键词</li>
+                      <li>选择采集来源：可选择多个搜索引擎作为采集来源</li>
+                      <li>设置采集页数：控制采集的深度，建议设置为10-50页</li>
+                      <li>设置延迟时间：避免对目标网站造成过大压力，建议设置为1000-3000ms</li>
+                    </ul>
+                  </div>
+                  
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>2. 开始采集</div>
+                    <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                      <li>点击"开始采集"按钮启动采集任务</li>
+                      <li>在采集过程中可以查看实时进度和状态</li>
+                      <li>可以随时暂停、继续或停止采集任务</li>
+                    </ul>
+                  </div>
+                  
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>3. 查看和导出结果</div>
+                    <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                      <li>采集完成后，可以在"采集结果"中查看所有采集到的号码</li>
+                      <li>支持复制单个号码或全部号码到剪贴板</li>
+                      <li>支持导出为Excel或CSV格式</li>
+                    </ul>
+                  </div>
+                </div>
+                
+                <Title level={3}>注意事项</Title>
+                <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                  <li>请遵守目标网站的 robots.txt 规则，合理设置采集间隔</li>
+                  <li>不要过度采集同一网站，以免被封IP</li>
+                  <li>采集到的号码仅供合法用途，请勿用于 spam 等非法活动</li>
+                  <li>建议定期清理采集结果，只保留有用的号码</li>
+                </ul>
+                
+                <Title level={3}>常见问题</Title>
+                <div style={{ paddingLeft: '20px' }}>
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Q: 采集任务为什么会失败？</div>
+                    <div>A: 可能的原因包括网络问题、目标网站反爬机制、采集参数设置不合理等。建议检查网络连接，调整采集延迟，或减少采集页数。</div>
+                  </div>
+                  
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Q: 如何提高采集效率？</div>
+                    <div>A: 可以适当调整采集延迟，增加采集页数，或选择更多的采集来源。但请注意不要过度采集，以免被封IP。</div>
+                  </div>
+                  
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Q: 采集到的号码有重复怎么办？</div>
+                    <div>A: 系统会自动去重，重复的号码会被标记为"重复"，不会重复保存。</div>
+                  </div>
                 </div>
               </Space>
             </Card>
-          </Space>
-        </TabPane>
-      </Tabs>
+          </TabPane>
+        </Tabs>
+      </Spin>
+      
+      {/* 日志模态框 */}
+      <Modal
+        title="采集日志"
+        open={logsModalVisible}
+        onCancel={() => setLogsModalVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setLogsModalVisible(false)}>
+            关闭
+          </Button>
+        ]}
+        width={800}
+        destroyOnClose
+      >
+        <div style={{ maxHeight: '500px', overflowY: 'auto', padding: '10px', backgroundColor: '#fafafa', borderRadius: '4px' }}>
+          {logs.map((log, index) => (
+            <div key={index} style={{ marginBottom: '8px', fontSize: '12px', color: '#666' }}>
+              {log}
+            </div>
+          ))}
+        </div>
+      </Modal>
     </div>
   );
 };

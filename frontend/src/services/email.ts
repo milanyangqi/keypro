@@ -79,3 +79,9 @@ export const deleteEmails = async (ids: string[]): Promise<any> => {
   const response = await apiClient.post('/email/batch/delete', { ids });
   return response.data;
 };
+
+// 导出邮箱
+export const exportEmails = async (ids: string[]): Promise<any> => {
+  const response = await apiClient.post('/email/export', { ids });
+  return response.data;
+};

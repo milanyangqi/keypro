@@ -8,6 +8,8 @@ interface IEmail extends Document {
   platform?: string;
   uploader: mongoose.Types.ObjectId;
   uploadTime: Date;
+  exported: boolean;
+  exportTime?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -45,6 +47,14 @@ const EmailSchema: Schema = new Schema({
   uploadTime: {
     type: Date,
     required: true,
+  },
+  exported: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  exportTime: {
+    type: Date
   },
 }, {
   timestamps: true,

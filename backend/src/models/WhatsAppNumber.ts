@@ -9,6 +9,9 @@ export interface IWhatsAppNumber extends Document {
   platform?: string;
   uploader: mongoose.Types.ObjectId;
   uploadTime: Date;
+  exported: boolean;
+  exportTime?: Date;
+  taskId?: mongoose.Types.ObjectId; // 关联采集任务ID
   createdAt: Date;
   updatedAt: Date;
 }
@@ -46,6 +49,19 @@ const WhatsAppNumberSchema: Schema = new Schema({
   uploadTime: {
     type: Date,
     default: Date.now
+  },
+  exported: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  exportTime: {
+    type: Date
+  },
+  taskId: {
+    type: mongoose.Types.ObjectId,
+    ref: 'CollectionTask',
+    index: true
   },
   createdAt: {
     type: Date,

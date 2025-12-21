@@ -23,9 +23,11 @@ import {
   ClearOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
-  CopyOutlined
+  CopyOutlined,
+  ExportOutlined,
+  FilterOutlined
 } from '@ant-design/icons';
-import { uploadEmails, getEmails, deleteEmail, deleteEmails, downloadEmailTemplate, matchEmails } from '../services/email';
+import { uploadEmails, getEmails, deleteEmail, deleteEmails, downloadEmailTemplate, matchEmails, exportEmails } from '../services/email';
 import { Email, EmailMatchResult } from '../types';
 import dayjs, { Dayjs } from 'dayjs';
 
@@ -42,13 +44,15 @@ const EmailManagement: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(500);
   const [industry, setIndustry] = useState('餐饮');
-  const [uploadResult, setUploadResult] = useState<{ matched: number; saved: number } | null>(null);
+  const [uploadResult, setUploadResult] = useState<{ matched: number; saved: number; chinaEmails?: number } | null>(null);
   const [searchForm] = Form.useForm();
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([dayjs(), dayjs()]);
   // 新增状态：用于文本输入和匹配结果
   const [emailsText, setEmailsText] = useState('');
   const [matchResult, setMatchResult] = useState<EmailMatchResult | null>(null);
   const [matching, setMatching] = useState(false);
+  // 当前选中的标签页
+  const [currentTab, setCurrentTab] = useState<string>('all');
   // 平台选项，移除了全球搜索引擎
   const platformOptions = [
     'Google', 'Bing', 'Yahoo', 'Facebook', 'LinkedIn', 'TikTok', 'Instagram',
@@ -75,7 +79,7 @@ const EmailManagement: React.FC = () => {
   };
 
   // 加载邮箱列表
-  const loadEmails = async (page: number = 1, size: number = 500) => {
+  const loadEmails = async (page: number = 1, size: number = 500, exported?: boolean) => {
     setLoading(true);
     try {
       const selectedIndustry = searchForm.getFieldValue('industry');
@@ -83,6 +87,11 @@ const EmailManagement: React.FC = () => {
         page,
         limit: size
       };
+
+      // 只有当exported参数被明确传递时才添加到查询条件中
+      if (exported !== undefined) {
+        params.exported = exported;
+      }
 
       // 日期筛选
       if (dateRange[0]) {
@@ -105,6 +114,50 @@ const EmailManagement: React.FC = () => {
       message.error(error.message || '获取邮箱列表失败');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 导出功能
+  const handleExport = async () => {
+    try {
+      // 检查是否有选中的邮箱
+      if (selectedRows.length === 0) {
+        message.warning('请先选择要导出的邮箱！');
+        return;
+      }
+      
+      // 调用导出接口
+      const selectedIds = selectedRows.map(row => row._id);
+      const data = await exportEmails(selectedIds);
+      
+      // 提取邮箱地址
+      const emails = data.exportedEmails.map((item: any) => item.email);
+      const emailsText = emails.join('\n');
+      
+      // 复制到剪贴板
+      try {
+        await navigator.clipboard.writeText(emailsText);
+      } catch (clipboardError) {
+        console.warn('剪贴板复制失败，将仅提供文件下载：', clipboardError);
+      }
+      
+      // 创建并下载文本文件
+      const blob = new Blob([emailsText], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `emails-${new Date().toISOString().slice(0, 10)}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      message.success(`导出成功！${emails.length}个邮箱已复制到剪贴板并下载为文件！`);
+      
+      // 重新加载数据，更新显示
+      loadEmails(currentPage, pageSize);
+    } catch (error: any) {
+      message.error(error.message || '导出失败！');
     }
   };
 
@@ -176,15 +229,15 @@ const EmailManagement: React.FC = () => {
 
 
   // 处理搜索
-  const handleSearch = () => {
-    loadEmails(1, pageSize);
+  const handleSearch = (exported?: boolean) => {
+    loadEmails(1, pageSize, exported);
   };
 
   // 处理清除筛选
   const handleClearFilters = () => {
     setDateRange([null, null]);
     searchForm.setFieldsValue({ industry: '全部' });
-    loadEmails(1, pageSize);
+    loadEmails(1, pageSize); // 清除筛选后查询所有邮箱
   };
 
   // 处理行业变化
@@ -420,7 +473,14 @@ const EmailManagement: React.FC = () => {
     onChange: (page: number, size: number) => {
       setCurrentPage(page);
       setPageSize(size);
-      loadEmails(page, size);
+      // 根据当前选中的标签页重新查询数据
+      if (currentTab === 'all') {
+        loadEmails(page, size);
+      } else if (currentTab === 'notExported') {
+        loadEmails(page, size, false);
+      } else if (currentTab === 'exported') {
+        loadEmails(page, size, true);
+      }
     },
     showSizeChanger: true,
     pageSizeOptions: ['50', '100', '200', '500', '1000', '2000', '5000'],
@@ -552,11 +612,14 @@ const EmailManagement: React.FC = () => {
               {uploadResult && (
                 <Card title="上传结果" type="inner" size="small">
                   <Row gutter={16}>
-                    <Col span={12}>
+                    <Col span={8}>
                       <p>已存在邮箱：<strong>{uploadResult.matched}</strong> 个</p>
                     </Col>
-                    <Col span={12}>
+                    <Col span={8}>
                       <p>新增邮箱：<strong>{uploadResult.saved}</strong> 个</p>
+                    </Col>
+                    <Col span={8}>
+                      <p>过滤国内邮箱：<strong>{uploadResult.chinaEmails || 0}</strong> 个</p>
                     </Col>
                   </Row>
                 </Card>
@@ -590,7 +653,7 @@ const EmailManagement: React.FC = () => {
               <Card title="匹配结果" type="inner" size="small" style={{ marginTop: 16 }}>
                 <Row gutter={16}>
                   {/* 已存在邮箱 */}
-                  <Col span={12}>
+                  <Col span={8}>
                     <Card title={`已存在邮箱 (${matchResult.matched.count})`} bordered={false}>
                       <Space direction="vertical" style={{ width: '100%' }}>
                         <Button
@@ -622,7 +685,7 @@ const EmailManagement: React.FC = () => {
                     </Card>
                   </Col>
                   {/* 新增邮箱 */}
-                  <Col span={12}>
+                  <Col span={8}>
                     <Card title={`新增邮箱 (${matchResult.unmatched.count})`} bordered={false}>
                       <Space direction="vertical" style={{ width: '100%' }}>
                         <Button
@@ -653,6 +716,38 @@ const EmailManagement: React.FC = () => {
                       </Space>
                     </Card>
                   </Col>
+                  {/* 过滤国内邮箱 */}
+                  <Col span={8}>
+                    <Card title={`过滤国内邮箱 (${matchResult.chinaEmails.count})`} bordered={false}>
+                      <Space direction="vertical" style={{ width: '100%' }}>
+                        <Button
+                          type="text"
+                          icon={<CopyOutlined />}
+                          onClick={() => {
+                            const chinaEmails = matchResult.chinaEmails.emails.join('\n');
+                            copyToClipboard(chinaEmails);
+                          }}
+                          style={{ alignSelf: 'flex-end' }}
+                        >
+                          复制所有
+                        </Button>
+                        <div style={{ 
+                          maxHeight: 300, 
+                          overflowY: 'auto', 
+                          border: '1px solid #f0f0f0', 
+                          borderRadius: 4, 
+                          padding: 12 
+                        }}>
+                          {matchResult.chinaEmails.emails.map((email: string, index: number) => (
+                            <div key={index} style={{ marginBottom: 8, fontSize: 14 }}>
+                              <FilterOutlined style={{ color: '#1890ff', marginRight: 8 }} />
+                              {email}
+                            </div>
+                          ))}
+                        </div>
+                      </Space>
+                    </Card>
+                  </Col>
                 </Row>
               </Card>
             )}
@@ -660,12 +755,21 @@ const EmailManagement: React.FC = () => {
 
           {/* 邮箱查询标签页 */}
           <TabPane tab="邮箱查询" key="2">
-            {/* 搜索条件 */}
+            {/* 搜索条件 - 移动到内部Tabs上方 */}
             <Card type="inner" size="small" style={{ marginBottom: 16 }}>
               <Form
                 form={searchForm}
                 layout="inline"
-                onFinish={handleSearch}
+                onFinish={() => {
+                  // 根据当前选中的标签页决定查询条件
+                  if (currentTab === 'all') {
+                    handleSearch(undefined); // 查询所有邮箱
+                  } else if (currentTab === 'notExported') {
+                    handleSearch(false); // 查询未导出邮箱
+                  } else if (currentTab === 'exported') {
+                    handleSearch(true); // 查询已导出邮箱
+                  }
+                }}
               >
                 <Form.Item name="industry" label="行业">
                   <Select
@@ -712,25 +816,107 @@ const EmailManagement: React.FC = () => {
                       清除
                     </Button>
                     {selectedRows.length > 0 && (
-                      <Button danger icon={<DeleteOutlined />} onClick={handleBatchDelete}>
-                        批量删除 ({selectedRows.length})
-                      </Button>
+                      <>
+                        <Button type="primary" icon={<ExportOutlined />} onClick={handleExport}>
+                          导出 ({selectedRows.length})
+                        </Button>
+                        <Button danger icon={<DeleteOutlined />} onClick={handleBatchDelete}>
+                          批量删除 ({selectedRows.length})
+                        </Button>
+                      </>
                     )}
                   </Space>
                 </Form.Item>
               </Form>
             </Card>
 
-            {/* 邮箱列表 */}
-            <Table
-              columns={columns}
-              dataSource={emails}
-              rowKey="_id"
-              loading={loading}
-              pagination={paginationConfig}
-              bordered
-              onChange={handleTableChange}
-            />
+            <Tabs 
+              defaultActiveKey="all"
+              activeKey={currentTab}
+              onChange={(key) => {
+                // 切换标签时更新状态并重新查询
+                setCurrentTab(key);
+                if (key === 'all') {
+                  handleSearch(undefined); // 查询所有邮箱
+                } else if (key === 'notExported') {
+                  handleSearch(false); // 查询未导出邮箱
+                } else if (key === 'exported') {
+                  handleSearch(true); // 查询已导出邮箱
+                }
+              }}
+            >
+              {/* 查询结果子标签 */}
+              <TabPane tab="查询结果" key="all">
+                {/* 邮箱列表 */}
+                <Table
+                  columns={columns}
+                  dataSource={emails}
+                  rowKey="_id"
+                  loading={loading}
+                  pagination={paginationConfig}
+                  bordered
+                  onChange={handleTableChange}
+                  onRow={(record) => ({
+                    onClick: () => {
+                      const selected = selectedRows.find(row => row._id === record._id);
+                      if (selected) {
+                        setSelectedRows(selectedRows.filter(row => row._id !== record._id));
+                      } else {
+                        setSelectedRows([...selectedRows, record]);
+                      }
+                    }
+                  })}
+                />
+              </TabPane>
+
+              {/* 未导出子标签 */}
+              <TabPane tab="未导出" key="notExported">
+                {/* 邮箱列表 */}
+                <Table
+                  columns={columns}
+                  dataSource={emails.filter(email => !email.exported)}
+                  rowKey="_id"
+                  loading={loading}
+                  pagination={paginationConfig}
+                  bordered
+                  onChange={handleTableChange}
+                  onRow={(record) => ({
+                    onClick: () => {
+                      const selected = selectedRows.find(row => row._id === record._id);
+                      if (selected) {
+                        setSelectedRows(selectedRows.filter(row => row._id !== record._id));
+                      } else {
+                        setSelectedRows([...selectedRows, record]);
+                      }
+                    }
+                  })}
+                />
+              </TabPane>
+
+              {/* 已导出子标签 */}
+              <TabPane tab="已导出" key="exported">
+                {/* 邮箱列表 */}
+                <Table
+                  columns={columns}
+                  dataSource={emails.filter(email => email.exported)}
+                  rowKey="_id"
+                  loading={loading}
+                  pagination={paginationConfig}
+                  bordered
+                  onChange={handleTableChange}
+                  onRow={(record) => ({
+                    onClick: () => {
+                      const selected = selectedRows.find(row => row._id === record._id);
+                      if (selected) {
+                        setSelectedRows(selectedRows.filter(row => row._id !== record._id));
+                      } else {
+                        setSelectedRows([...selectedRows, record]);
+                      }
+                    }
+                  })}
+                />
+              </TabPane>
+            </Tabs>
           </TabPane>
         </Tabs>
       </Card>

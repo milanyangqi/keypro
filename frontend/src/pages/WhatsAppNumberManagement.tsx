@@ -16,13 +16,13 @@ import {
 } from 'antd';
 import { 
   UploadOutlined, 
-  DownloadOutlined, 
   SearchOutlined,
   CopyOutlined,
   PlusOutlined,
-  DeleteOutlined
+  DeleteOutlined,
+  ExportOutlined
 } from '@ant-design/icons';
-import { uploadNumbers, matchNumbers, getNumbers, downloadTemplate, deleteNumber, deleteNumbers } from '../services/whatsapp';
+import { uploadNumbers, matchNumbers, getNumbers, deleteNumber, deleteNumbers, exportNumbers } from '../services/whatsapp';
 import { WhatsAppNumber, WhatsAppMatchResult } from '../types';
 import dayjs, { Dayjs } from 'dayjs';
 
@@ -63,6 +63,9 @@ const WhatsAppNumberManagement: React.FC = () => {
   const [filteredInfo, setFilteredInfo] = useState<{
     [key: string]: any;
   }>({});
+  // 用于区分未导出和已导出的选中行
+  const [selectedUnexportedRowKeys, setSelectedUnexportedRowKeys] = useState<React.Key[]>([]);
+  const [selectedExportedRowKeys, setSelectedExportedRowKeys] = useState<React.Key[]>([]);
   
   // 处理表格筛选和排序
   const handleTableChange = (_pagination: any, filters: any, _sorter: any) => {
@@ -229,7 +232,7 @@ const WhatsAppNumberManagement: React.FC = () => {
   };
 
   // 查询号码
-  const handleQuery = async () => {
+  const handleQuery = async (exported?: boolean) => {
     setQueryLoading(true);
     try {
       const selectedIndustry = form.getFieldValue('industry');
@@ -237,6 +240,11 @@ const WhatsAppNumberManagement: React.FC = () => {
         page: currentPage,
         limit: pageSize
       };
+      
+      // 只有当exported参数被明确传递时才添加到查询条件中
+      if (exported !== undefined) {
+        params.exported = exported;
+      }
       
       if (selectedIndustry && selectedIndustry !== '全部') {
         params.industry = selectedIndustry;
@@ -256,6 +264,53 @@ const WhatsAppNumberManagement: React.FC = () => {
       setTotal(response.pagination.total);
     } catch (error: any) {
       message.error(error.message || '查询失败！');
+    } finally {
+      setQueryLoading(false);
+    }
+  };
+
+  // 导出号码
+  const handleExport = async () => {
+    try {
+      // 获取当前选中的未导出号码
+      const selectedIds = selectedUnexportedRowKeys;
+      if (selectedIds.length === 0) {
+        message.warning('请先选择要导出的号码！');
+        return;
+      }
+      
+      setQueryLoading(true);
+      // 调用导出接口
+      const data = await exportNumbers(selectedIds as string[]);
+      
+      // 提取号码
+      const numbers = data.exportedNumbers.map((item: any) => item.number);
+      const numbersText = numbers.join('\n');
+      
+      // 复制到剪贴板
+      try {
+        await navigator.clipboard.writeText(numbersText);
+      } catch (clipboardError) {
+        console.warn('剪贴板复制失败，将仅提供文件下载：', clipboardError);
+      }
+      
+      // 创建并下载文本文件
+      const blob = new Blob([numbersText], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `whatsapp-numbers-${new Date().toISOString().slice(0, 10)}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      message.success(`导出成功！${numbers.length}个号码已复制到剪贴板并下载为文件！`);
+      
+      // 重新查询数据，更新显示
+      handleQuery(false);
+    } catch (error: any) {
+      message.error(error.message || '导出失败！');
     } finally {
       setQueryLoading(false);
     }
@@ -521,6 +576,9 @@ const WhatsAppNumberManagement: React.FC = () => {
     onChange: setSelectedRowKeys,
   };
 
+  // 添加状态跟踪当前激活的嵌套标签页
+  const [activeNestedTab, setActiveNestedTab] = useState('all');
+
   return (
     <div>
       <h1 style={{ marginBottom: 24, fontSize: 24, fontWeight: 600 }}>WhatsApp号码管理</h1>
@@ -624,15 +682,6 @@ const WhatsAppNumberManagement: React.FC = () => {
                           上传文件
                         </Button>
                       </Upload>
-                      <Button
-                        icon={<DownloadOutlined />}
-                        onClick={downloadTemplate}
-                      >
-                        下载模板
-                      </Button>
-                      <span style={{ color: '#666', fontSize: 12 }}>
-                        支持txt、csv、xlsx、xls格式，号码需为一行一个或第一列
-                      </span>
                     </Space>
                   </Form.Item>
                 </Col>
@@ -737,6 +786,7 @@ const WhatsAppNumberManagement: React.FC = () => {
         
         <TabPane tab="号码查询" key="2">
           <Card>
+            {/* 查询条件表单，放在嵌套标签页外部，所有标签页共享 */}
             <Form form={form} layout="inline" style={{ marginBottom: 16 }}>
               <Form.Item label="行业" name="industry">
                 <Select
@@ -771,7 +821,15 @@ const WhatsAppNumberManagement: React.FC = () => {
                 <Button
                   type="primary"
                   icon={<SearchOutlined />}
-                  onClick={handleQuery}
+                  onClick={() => {
+                    if (activeNestedTab === 'all') {
+                      handleQuery(); // 查询所有号码
+                    } else if (activeNestedTab === 'unexported') {
+                      handleQuery(false); // 查询未导出号码
+                    } else if (activeNestedTab === 'exported') {
+                      handleQuery(true); // 查询已导出号码
+                    }
+                  }}
                   loading={queryLoading}
                 >
                   搜索
@@ -780,7 +838,7 @@ const WhatsAppNumberManagement: React.FC = () => {
                   style={{ marginLeft: 8 }}
                   onClick={() => {
                     form.resetFields();
-                    setDateRange([dayjs().subtract(6, 'month'), dayjs()]);
+                    setDateRange([null, null]);
                   }}
                 >
                   重置
@@ -788,6 +846,7 @@ const WhatsAppNumberManagement: React.FC = () => {
               </Form.Item>
             </Form>
             
+            {/* 操作按钮 */}
             <Space style={{ marginBottom: 16 }}>
               <Button
                 type="primary"
@@ -798,29 +857,126 @@ const WhatsAppNumberManagement: React.FC = () => {
               >
                 批量删除 ({selectedRowKeys.length})
               </Button>
+              {/* 仅在未导出标签页显示导出按钮 */}
+              {activeNestedTab === 'unexported' && (
+                <Button
+                  type="primary"
+                  icon={<ExportOutlined />}
+                  onClick={handleExport}
+                  disabled={selectedUnexportedRowKeys.length === 0}
+                >
+                  批量导出 ({selectedUnexportedRowKeys.length})
+                </Button>
+              )}
             </Space>
             
-            <Table
-              columns={columns}
-              dataSource={numbers}
-              rowKey="_id"
-              rowSelection={rowSelection}
-              loading={queryLoading}
-              onChange={handleTableChange}
-              pagination={{
-                total,
-                current: currentPage,
-                pageSize,
-                onChange: (page, size) => {
-                  setCurrentPage(page);
-                  setPageSize(size);
-                  handleQuery();
-                },
-                showSizeChanger: true,
-                showTotal: (total) => `共 ${total} 条记录`,
-                pageSizeOptions: ['20', '50', '100', '200', '500', '1000', '2000', '5000']
+            {/* 嵌套标签页，用于切换查询结果、未导出、已导出 */}
+            <Tabs 
+              defaultActiveKey="all" 
+              size="middle" 
+              activeKey={activeNestedTab}
+              onChange={(key) => {
+                setActiveNestedTab(key);
+                // 根据切换的标签页重新查询数据
+                if (key === 'all') {
+                  handleQuery(); // 查询所有号码
+                } else if (key === 'unexported') {
+                  handleQuery(false); // 查询未导出号码
+                } else if (key === 'exported') {
+                  handleQuery(true); // 查询已导出号码
+                }
               }}
-            />
+            >
+              {/* 查询结果标签页 - 显示所有号码 */}
+              <TabPane tab="查询结果" key="all">
+                <Table
+                  columns={columns}
+                  dataSource={numbers}
+                  rowKey="_id"
+                  rowSelection={rowSelection}
+                  loading={queryLoading}
+                  pagination={{
+                    total,
+                    current: currentPage,
+                    pageSize,
+                    onChange: (page, size) => {
+                      setCurrentPage(page);
+                      setPageSize(size);
+                      handleQuery(); // 查询所有号码
+                    },
+                    showSizeChanger: true,
+                    showTotal: (total) => `共 ${total} 条记录`,
+                    pageSizeOptions: ['20', '50', '100', '200', '500', '1000', '2000', '5000']
+                  }}
+                  onChange={handleTableChange}
+                />
+              </TabPane>
+              
+              {/* 未导出标签页 - 显示未导出号码 */}
+              <TabPane tab="未导出" key="unexported">
+                <Table
+                  columns={columns}
+                  dataSource={numbers.filter(num => !num.exported)}
+                  rowKey="_id"
+                  rowSelection={{
+                    selectedRowKeys: selectedUnexportedRowKeys,
+                    onChange: setSelectedUnexportedRowKeys,
+                  }}
+                  loading={queryLoading}
+                  pagination={{
+                    total: numbers.filter(num => !num.exported).length,
+                    current: currentPage,
+                    pageSize,
+                    onChange: (page, size) => {
+                      setCurrentPage(page);
+                      setPageSize(size);
+                      handleQuery(false); // 查询未导出号码
+                    },
+                    showSizeChanger: true,
+                    showTotal: (total) => `共 ${total} 条记录`,
+                    pageSizeOptions: ['20', '50', '100', '200', '500', '1000', '2000', '5000']
+                  }}
+                  onChange={handleTableChange}
+                />
+              </TabPane>
+              
+              {/* 已导出标签页 - 显示已导出号码 */}
+              <TabPane tab="已导出" key="exported">
+                <Table
+                  columns={[
+                    ...columns,
+                    {
+                      title: '导出时间',
+                      dataIndex: 'exportTime',
+                      key: 'exportTime',
+                      width: 200,
+                      render: (time: string) => time ? dayjs(time).format('YYYY-MM-DD HH:mm:ss') : '-' // 格式化导出时间
+                    }
+                  ]}
+                  dataSource={numbers.filter(num => num.exported)}
+                  rowKey="_id"
+                  rowSelection={{
+                    selectedRowKeys: selectedExportedRowKeys,
+                    onChange: setSelectedExportedRowKeys,
+                  }}
+                  loading={queryLoading}
+                  pagination={{
+                    total: numbers.filter(num => num.exported).length,
+                    current: currentPage,
+                    pageSize,
+                    onChange: (page, size) => {
+                      setCurrentPage(page);
+                      setPageSize(size);
+                      handleQuery(true); // 查询已导出号码
+                    },
+                    showSizeChanger: true,
+                    showTotal: (total) => `共 ${total} 条记录`,
+                    pageSizeOptions: ['20', '50', '100', '200', '500', '1000', '2000', '5000']
+                  }}
+                  onChange={handleTableChange}
+                />
+              </TabPane>
+            </Tabs>
           </Card>
         </TabPane>
       </Tabs>

@@ -6,7 +6,8 @@ import {
   getNumberStats, 
   downloadTemplate,
   deleteNumber,
-  deleteNumbers
+  deleteNumbers,
+  exportNumbers  // 添加导入
 } from '../controllers/whatsapp';
 import authMiddleware from '../middleware/auth';
 import upload from '../middleware/upload';
@@ -33,5 +34,8 @@ router.delete('/:id', authMiddleware, deleteNumber);
 
 // 批量删除WhatsApp号码（需要认证）
 router.post('/batch/delete', authMiddleware, deleteNumbers);
+
+// 导出WhatsApp号码（需要认证）
+router.post('/export', authMiddleware, exportNumbers);  // 添加路由
 
 export default router;

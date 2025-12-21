@@ -4,6 +4,51 @@ import path from 'path';
 import XLSX from 'xlsx';
 import Email from '../models/Email';
 
+// 国内邮箱域名列表
+const CHINA_EMAIL_DOMAINS = new Set([
+  // .cn域名
+  'cn',
+  'com.cn',
+  'net.cn',
+  'org.cn',
+  'edu.cn',
+  'gov.cn',
+  // 国内主要邮箱服务商
+  'qq.com',
+  '163.com',
+  '126.com',
+  'sina.com',
+  'sina.com.cn',
+  'sohu.com',
+  'sohu.com.cn',
+  '139.com',
+  '189.cn',
+  'gmail.com.cn',
+  'aliyun.com',
+  'aliyun.com.cn',
+  'foxmail.com',
+  'tom.com',
+  'vip.qq.com',
+  'vip.sina.com',
+  'vip.sohu.com',
+  'yeah.net'
+]);
+
+// 判断是否为国内邮箱
+const isChinaEmail = (email: string): boolean => {
+  try {
+    const domain = email.split('@')[1].toLowerCase();
+    // 检查完整域名或顶级域名
+    if (CHINA_EMAIL_DOMAINS.has(domain)) {
+      return true;
+    }
+    // 检查是否为*.cn域名
+    return domain.endsWith('.cn');
+  } catch (error) {
+    return false;
+  }
+};
+
 // 解析文件中的邮箱
 const parseEmailsFromFile = (filePath: string, fileExt: string): string[] => {
   let emails: string[] = [];
@@ -85,9 +130,16 @@ export const uploadEmails = async (req: express.Request, res: express.Response) 
     // 去重并清理
     const uniqueEmails = [...new Set(emails.map(n => n.trim()))];
     
+    // 过滤国内邮箱
+    const filteredEmails = uniqueEmails.filter(email => !isChinaEmail(email));
+    const chinaEmails = uniqueEmails.filter(email => isChinaEmail(email));
+    
+    console.log('Filtered emails (non-China):', filteredEmails.length);
+    console.log('China emails:', chinaEmails.length);
+    
     // 查询已存在的邮箱
     const existingEmails = await Email.find({
-      email: { $in: uniqueEmails }
+      email: { $in: filteredEmails }
     });
     
     console.log('Found existing emails:', existingEmails.length);
@@ -97,7 +149,7 @@ export const uploadEmails = async (req: express.Request, res: express.Response) 
     
     // 分离已存在和新邮箱
     const matchedEmails = existingEmails;
-    const unmatchedEmails = uniqueEmails.filter(n => !existingEmailSet.has(n));
+    const unmatchedEmails = filteredEmails.filter(n => !existingEmailSet.has(n));
     
     console.log('Unmatched emails to save:', unmatchedEmails.length);
     
@@ -137,7 +189,9 @@ export const uploadEmails = async (req: express.Request, res: express.Response) 
         matched: matchedEmails.length,
         matchedEmails,
         saved: savedEmails.length,
-        savedEmails
+        savedEmails,
+        chinaEmailsCount: chinaEmails.length,
+        chinaEmails
       }
     });
   } catch (error: any) {
@@ -175,9 +229,16 @@ export const matchEmails = async (req: express.Request, res: express.Response) =
     // 去重并清理
     const uniqueEmails = [...new Set(emails.map(n => n.trim()))];
     
+    // 过滤国内邮箱
+    const filteredEmails = uniqueEmails.filter(email => !isChinaEmail(email));
+    const chinaEmails = uniqueEmails.filter(email => isChinaEmail(email));
+    
+    console.log('Filtered emails (non-China):', filteredEmails.length);
+    console.log('China emails:', chinaEmails.length);
+    
     // 查询已存在的邮箱
     const existingEmails = await Email.find({
-      email: { $in: uniqueEmails }
+      email: { $in: filteredEmails }
     });
     
     console.log('Found existing emails:', existingEmails.length);
@@ -187,7 +248,7 @@ export const matchEmails = async (req: express.Request, res: express.Response) =
     
     // 分离已存在和新邮箱
     const matched = existingEmails;
-    const unmatched = uniqueEmails.filter(n => !existingEmailSet.has(n));
+    const unmatched = filteredEmails.filter(n => !existingEmailSet.has(n));
     
     return res.status(200).json({
       status: 'success',
@@ -200,6 +261,10 @@ export const matchEmails = async (req: express.Request, res: express.Response) =
         unmatched: {
           count: unmatched.length,
           emails: unmatched
+        },
+        chinaEmails: {
+          count: chinaEmails.length,
+          emails: chinaEmails
         }
       }
     });
@@ -215,11 +280,16 @@ export const matchEmails = async (req: express.Request, res: express.Response) =
 // 查询邮箱控制器
 export const getEmails = async (req: express.Request, res: express.Response) => {
   try {
-    const { date, startDate, endDate, industry, uploader, page = 1, limit = 20 } = req.query;
+    const { date, startDate, endDate, industry, uploader, exported, page = 1, limit = 20 } = req.query;
     
     console.log('Query params:', req.query);
     
     const query: any = {};
+    
+    // 按导出状态查询
+    if (exported !== undefined) {
+      query.exported = exported === 'true';
+    }
     
     // 按日期查询
     if (date) {
@@ -493,6 +563,50 @@ export const deleteEmails = async (req: express.Request, res: express.Response) 
     });
   } catch (error: any) {
     console.error('Batch delete error:', error);
+    return res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+};
+
+// 导出邮箱控制器
+export const exportEmails = async (req: express.Request, res: express.Response) => {
+  try {
+    const { ids } = req.body;
+    
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'IDs array is required and must not be empty'
+      });
+    }
+    
+    // 标记邮箱为已导出
+    const exportTime = new Date();
+    const result = await Email.updateMany(
+      { _id: { $in: ids } },
+      { 
+        exported: true, 
+        exportTime 
+      }
+    );
+    
+    // 获取导出的邮箱详细信息
+    const exportedEmails = await Email.find({
+      _id: { $in: ids }
+    }).populate('uploader', 'username email');
+    
+    return res.status(200).json({
+      status: 'success',
+      message: 'Emails exported successfully',
+      data: {
+        exportedCount: result.modifiedCount,
+        exportedEmails
+      }
+    });
+  } catch (error: any) {
+    console.error('Export error:', error);
     return res.status(500).json({
       status: 'error',
       message: error.message

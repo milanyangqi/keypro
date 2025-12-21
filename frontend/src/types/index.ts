@@ -31,13 +31,15 @@ export interface WhatsAppNumber {
   keyword?: string;
   syntax?: string;
   platform?: string;
-  uploader: string | User;
+  uploader: any;
   uploadTime: string;
+  exported: boolean;
+  exportTime?: string;
   createdAt: string;
   updatedAt: string;
 }
 
-// Email类型
+// 邮箱类型
 export interface Email {
   _id: string;
   email: string;
@@ -45,8 +47,10 @@ export interface Email {
   keyword?: string;
   syntax?: string;
   platform?: string;
-  uploader: string | User;
+  uploader: any;
   uploadTime: string;
+  exported: boolean;
+  exportTime?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -104,6 +108,10 @@ export interface EmailMatchResult {
     emails: Email[];
   };
   unmatched: {
+    count: number;
+    emails: string[];
+  };
+  chinaEmails: {
     count: number;
     emails: string[];
   };

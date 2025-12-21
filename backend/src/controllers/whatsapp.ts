@@ -219,11 +219,16 @@ export const matchNumbers = async (req: express.Request, res: express.Response) 
 // 查询WhatsApp号码控制器
 export const getNumbers = async (req: express.Request, res: express.Response) => {
   try {
-    const { date, startDate, endDate, industry, page = 1, limit = 20 } = req.query;
+    const { date, startDate, endDate, industry, exported, page = 1, limit = 20 } = req.query;
     
     console.log('Query params:', req.query);
     
     const query: any = {};
+    
+    // 按导出状态查询
+    if (exported !== undefined) {
+      query.exported = exported === 'true';
+    }
     
     // 按日期查询
     if (date) {
@@ -492,6 +497,50 @@ export const deleteNumbers = async (req: express.Request, res: express.Response)
     });
   } catch (error: any) {
     console.error('Batch delete error:', error);
+    return res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+};
+
+// 导出WhatsApp号码控制器
+export const exportNumbers = async (req: express.Request, res: express.Response) => {
+  try {
+    const { ids } = req.body;
+    
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'IDs array is required and must not be empty'
+      });
+    }
+    
+    // 标记号码为已导出
+    const exportTime = new Date();
+    const result = await WhatsAppNumber.updateMany(
+      { _id: { $in: ids } },
+      { 
+        exported: true, 
+        exportTime 
+      }
+    );
+    
+    // 获取导出的号码详细信息
+    const exportedNumbers = await WhatsAppNumber.find({
+      _id: { $in: ids }
+    }).populate('uploader', 'username email');
+    
+    return res.status(200).json({
+      status: 'success',
+      message: 'Numbers exported successfully',
+      data: {
+        exportedCount: result.modifiedCount,
+        exportedNumbers
+      }
+    });
+  } catch (error: any) {
+    console.error('Export error:', error);
     return res.status(500).json({
       status: 'error',
       message: error.message
