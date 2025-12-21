@@ -15,6 +15,7 @@ import userRoutes from './routes/user';
 import whatsappRoutes from './routes/whatsapp';
 import whatsappCollectionRoutes from './routes/whatsapp-collection';
 import emailRoutes from './routes/email';
+import emailCollectionRoutes from './routes/email-collection';
 
 // 创建Express应用
 const app = express();
@@ -45,6 +46,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/whatsapp-collection', whatsappCollectionRoutes);
 app.use('/api/email', emailRoutes);
+app.use('/api/email-collection', emailCollectionRoutes);
 
 // 健康检查路由
 app.get('/api/health', (req, res) => {
@@ -97,16 +99,48 @@ const initAdminUser = async () => {
 };
 
 // 连接数据库
-const connectDB = async () => {
+const connectDB = async (retryCount = 0, maxRetries = 5) => {
   try {
-    await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/keypro_trade');
+    // 添加MongoDB连接选项，提高连接稳定性
+    await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/keypro_trade', {
+      serverSelectionTimeoutMS: 5000, // 服务器选择超时
+      socketTimeoutMS: 45000, // 套接字超时
+      connectTimeoutMS: 10000, // 连接超时
+      retryWrites: true, // 重试写入操作
+      autoIndex: true, // 自动创建索引
+      family: 4 // 使用IPv4
+    });
     console.log('MongoDB connected successfully');
     
     // 初始化管理员用户
     await initAdminUser();
+    
+    // 添加数据库连接事件监听器
+    mongoose.connection.on('disconnected', () => {
+      console.warn('MongoDB disconnected, attempting to reconnect...');
+      connectDB();
+    });
+    
+    mongoose.connection.on('error', (err) => {
+      console.error('MongoDB connection error:', err);
+    });
+    
+    mongoose.connection.on('reconnected', () => {
+      console.log('MongoDB reconnected successfully');
+    });
+    
   } catch (error) {
-    console.error('MongoDB connection error:', error);
-    process.exit(1);
+    console.error(`MongoDB connection error (attempt ${retryCount + 1}/${maxRetries}):`, error);
+    
+    if (retryCount < maxRetries) {
+      const delay = Math.min(1000 * Math.pow(2, retryCount), 30000); // 指数退避策略
+      console.log(`Retrying connection in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return connectDB(retryCount + 1, maxRetries);
+    } else {
+      console.error('Max MongoDB connection retries reached, exiting...');
+      process.exit(1);
+    }
   }
 };
 

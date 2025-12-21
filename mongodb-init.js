@@ -26,11 +26,10 @@ keyproDb.whatsapp_numbers.createIndex({ industry: 1 });
 const adminUser = keyproDb.users.findOne({ username: 'admin' });
 if (!adminUser) {
   // 使用bcrypt加密密码：admin123
-  // 注意：这里使用了简化的密码加密，实际部署时应该使用更安全的方式
   keyproDb.users.insertOne({
     username: 'admin',
     email: 'admin@example.com',
-    password: '$2a$10$eKdC9X7Z5Q7qY8W9E1R2T3Y4U5I6O7P8A9S0D1F2G3H4J5K6L7M8N9O0P1Q2R3S4T5U6V7W8X9Y0Z', // 实际密码是admin123
+    password: '$2b$10$0peP5Op5YXxl4dg3koYsQ.j.D6HIzvv.ZVIetOo6VJf0OUnswa9EW', // 实际密码是admin123
     role: 'admin',
     status: 'active',
     createdAt: new Date(),

@@ -22,6 +22,7 @@ const WhatsAppNumberSchema: Schema = new Schema({
     type: String,
     required: true,
     trim: true,
+    unique: true, // 添加唯一性索引，防止重复号码
     index: true
   },
   industry: {

@@ -10,7 +10,7 @@ import {
   getCollectionResults,
   getCollectionLogs,
   exportResults
-} from '../controllers/whatsapp-collection';
+} from '../controllers/email-collection';
 import authMiddleware from '../middleware/auth';
 
 const router = express.Router();

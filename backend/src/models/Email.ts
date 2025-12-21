@@ -10,6 +10,7 @@ interface IEmail extends Document {
   uploadTime: Date;
   exported: boolean;
   exportTime?: Date;
+  taskId?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -55,6 +56,11 @@ const EmailSchema: Schema = new Schema({
   },
   exportTime: {
     type: Date
+  },
+  taskId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'CollectionTask',
+    index: true
   },
 }, {
   timestamps: true,

@@ -1,64 +1,53 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Card, 
-  Input, 
-  Button, 
-  Select, 
-  Space, 
-  message, 
-  Tabs, 
-  Table, 
-  Tag, 
-  Progress, 
-  Typography, 
-  Row, 
-  Col, 
-  Checkbox, 
-  Spin, 
+import {
+  Card,
+  Input,
+  Button,
+  Space,
+  message,
+  Tabs,
+  Table,
+  Tag,
+  Progress,
+  Typography,
+  Row,
+  Col,
+  Checkbox,
+  Spin,
   InputNumber,
   Modal
 } from 'antd';
-import { 
-  SearchOutlined, 
-  DownloadOutlined, 
-  CopyOutlined, 
-  PlayCircleOutlined, 
-  PauseCircleOutlined, 
+import {
+  SearchOutlined,
+  DownloadOutlined,
+  CopyOutlined,
+  PlayCircleOutlined,
+  PauseCircleOutlined,
   StopOutlined,
   LoadingOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
   InfoCircleOutlined
 } from '@ant-design/icons';
-import { WhatsAppNumber } from '../types';
-import { 
-  getCollectionWebsites, 
-  getCollectionRegions, 
-  startCollection, 
-  pauseCollection, 
-  resumeCollection, 
-  stopCollection, 
-  getCollectionStatus, 
-  getCollectionResults, 
-  getCollectionLogs, 
-  exportCollectionResults 
-} from '../services/whatsapp';
-
-const { Option } = Select;
+import { Email } from '../types';
+import {
+  getEmailCollectionWebsites,
+  startEmailCollection,
+  pauseEmailCollection,
+  resumeEmailCollection,
+  stopEmailCollection,
+  getEmailCollectionStatus,
+  getEmailCollectionResults,
+  getEmailCollectionLogs,
+  exportEmailCollectionResults
+} from '../services/email';
 const { TabPane } = Tabs;
 const { Title, Paragraph } = Typography;
 
 // 采集任务状态类型
 type TaskStatus = 'pending' | 'running' | 'paused' | 'completed' | 'stopped' | 'failed';
 
-// 采集配置类型
-interface CollectionConfig {
-  regions: string[];
-  keywords: string[];
-  sources: string[];
-  pages: number;
-  delay?: number;
-}
+
 
 // 采集进度类型
 interface CollectionProgress {
@@ -88,16 +77,14 @@ interface CollectionStatus {
 }
 
 // localStorage键名常量
-const STORAGE_KEY = 'whatsapp-collection-data';
+const STORAGE_KEY = 'email-collection-data';
 
-const WhatsAppNumberCollection: React.FC = () => {
+const EmailCollection: React.FC = () => {
   // 初始化状态
   const [loading, setLoading] = useState(true);
   const [websites, setWebsites] = useState<Array<{ value: string; label: string; url: string }>>([]);
-  const [regions, setRegions] = useState<Array<{ value: string; label: string; code: string }>>([]);
   
   // 采集配置
-  const [selectedRegions, setSelectedRegions] = useState<string[]>(['usa']);
   const [keywords, setKeywords] = useState('');
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const [pages, setPages] = useState<number>(10);
@@ -109,7 +96,7 @@ const WhatsAppNumberCollection: React.FC = () => {
   const [logs, setLogs] = useState<string[]>([]);
   
   // 采集结果
-  const [collectionResults, setCollectionResults] = useState<WhatsAppNumber[]>([]);
+  const [collectionResults, setCollectionResults] = useState<Email[]>([]);
   const [totalResults, setTotalResults] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -126,7 +113,6 @@ const WhatsAppNumberCollection: React.FC = () => {
       const storedData = localStorage.getItem(STORAGE_KEY);
       if (storedData) {
         const data = JSON.parse(storedData);
-        if (data.selectedRegions) setSelectedRegions(data.selectedRegions);
         if (data.keywords) setKeywords(data.keywords);
         if (data.selectedSources) setSelectedSources(data.selectedSources);
         if (data.pages) setPages(data.pages);
@@ -149,7 +135,6 @@ const WhatsAppNumberCollection: React.FC = () => {
   const saveDataToStorage = () => {
     try {
       const data = {
-        selectedRegions,
         keywords,
         selectedSources,
         pages,
@@ -173,12 +158,8 @@ const WhatsAppNumberCollection: React.FC = () => {
     const fetchInitialData = async () => {
       try {
         setLoading(true);
-        const [websitesData, regionsData] = await Promise.all([
-          getCollectionWebsites(),
-          getCollectionRegions()
-        ]);
+        const websitesData = await getEmailCollectionWebsites();
         setWebsites(websitesData.data.websites);
-        setRegions(regionsData.data.regions);
         
         // 从localStorage加载数据
         loadDataFromStorage();
@@ -197,7 +178,7 @@ const WhatsAppNumberCollection: React.FC = () => {
   // 监听状态变化，保存数据到localStorage
   useEffect(() => {
     saveDataToStorage();
-  }, [selectedRegions, keywords, selectedSources, pages, delay, collectionStatus, isCollecting, logs, collectionResults, totalResults, currentPage, pageSize]);
+  }, [keywords, selectedSources, pages, delay, collectionStatus, isCollecting, logs, collectionResults, totalResults, currentPage, pageSize]);
   
   // 定时更新采集状态
   useEffect(() => {
@@ -205,7 +186,7 @@ const WhatsAppNumberCollection: React.FC = () => {
     if (collectionStatus && isCollecting && ['running', 'paused'].includes(collectionStatus.status)) {
       interval = setInterval(async () => {
         try {
-          const statusData = await getCollectionStatus(collectionStatus.taskId);
+          const statusData = await getEmailCollectionStatus(collectionStatus.taskId);
           setCollectionStatus(statusData.data);
           
           // 如果任务已完成或停止，取消定时更新
@@ -227,7 +208,6 @@ const WhatsAppNumberCollection: React.FC = () => {
       localStorage.removeItem(STORAGE_KEY);
       message.success('本地存储数据已清除');
       // 重置状态
-      setSelectedRegions(['usa']);
       setKeywords('');
       setSelectedSources([]);
       setPages(10);
@@ -261,21 +241,21 @@ const WhatsAppNumberCollection: React.FC = () => {
       
       setLoading(true);
       
-      // 准备采集配置
-      const config: CollectionConfig = {
-        regions: selectedRegions,
-        keywords: keywords.split('\n').filter(keyword => keyword.trim()),
-        sources: selectedSources,
-        pages,
-        delay
+      // 准备采集配置（添加默认regions字段以满足API要求）
+      const apiConfig = {
+        config: {
+          regions: [], // 添加空数组满足API要求
+          keywords: keywords.split('\n').filter(keyword => keyword.trim()),
+          sources: selectedSources,
+          pages,
+          delay
+        }
       };
       
       // 调用开始采集API
-      const response = await startCollection({
-        config
-      });
+      const result = await startEmailCollection(apiConfig);
       
-      const taskId = response.data.taskId;
+      const taskId = result.data.taskId;
       message.success('采集任务已启动');
       
       // 初始化采集状态
@@ -317,7 +297,7 @@ const WhatsAppNumberCollection: React.FC = () => {
     if (!collectionStatus) return;
     
     try {
-      await pauseCollection(collectionStatus.taskId);
+      await pauseEmailCollection(collectionStatus.taskId);
       setCollectionStatus(prev => prev ? { ...prev, status: 'paused' } : null);
       message.success('采集任务已暂停');
       setLogs(prev => [...prev, `采集任务已暂停 - ${new Date().toISOString()}`]);
@@ -332,7 +312,7 @@ const WhatsAppNumberCollection: React.FC = () => {
     if (!collectionStatus) return;
     
     try {
-      await resumeCollection(collectionStatus.taskId);
+      await resumeEmailCollection(collectionStatus.taskId);
       setCollectionStatus(prev => prev ? { ...prev, status: 'running' } : null);
       message.success('采集任务已继续');
       setLogs(prev => [...prev, `采集任务已继续 - ${new Date().toISOString()}`]);
@@ -347,7 +327,7 @@ const WhatsAppNumberCollection: React.FC = () => {
     if (!collectionStatus) return;
     
     try {
-      await stopCollection(collectionStatus.taskId);
+      await stopEmailCollection(collectionStatus.taskId);
       setCollectionStatus(prev => prev ? { ...prev, status: 'stopped' } : null);
       setIsCollecting(false);
       message.success('采集任务已停止');
@@ -363,13 +343,13 @@ const WhatsAppNumberCollection: React.FC = () => {
     try {
       setLoading(true);
       // 即使没有collectionStatus，也调用API，使用空字符串作为默认taskId
-      const response = await getCollectionResults(collectionStatus?.taskId || '', {
+      const result = await getEmailCollectionResults(collectionStatus?.taskId || '', {
         page: currentPage,
         limit: pageSize
       });
-      setCollectionResults(response.data.numbers);
-      setTotalResults(response.data.pagination.total);
-      message.success(`获取到 ${response.data.numbers.length} 条采集结果`);
+      setCollectionResults(result.data.emails);
+      setTotalResults(result.data.pagination.total);
+      message.success(`获取到 ${result.data.emails.length} 条采集结果`);
     } catch (error) {
       console.error('Failed to fetch collection results:', error);
       message.error('获取采集结果失败');
@@ -384,8 +364,8 @@ const WhatsAppNumberCollection: React.FC = () => {
     
     try {
       setLoading(true);
-      const response = await getCollectionLogs(collectionStatus.taskId);
-      setLogs(response.data.logs);
+      const result = await getEmailCollectionLogs(collectionStatus.taskId);
+      setLogs(result.data.logs);
       message.success('获取采集日志成功');
       setLogsModalVisible(true);
     } catch (error) {
@@ -402,12 +382,12 @@ const WhatsAppNumberCollection: React.FC = () => {
     
     try {
       setExportLoading(true);
-      const response = await exportCollectionResults(collectionStatus.taskId, format);
+      const result = await exportEmailCollectionResults(collectionStatus.taskId, format);
       
       // 创建下载链接
       const link = document.createElement('a');
-      link.href = response.data.fileUrl;
-      link.download = response.data.fileName;
+      link.href = result.data.fileUrl;
+      link.download = result.data.fileName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -430,24 +410,24 @@ const WhatsAppNumberCollection: React.FC = () => {
     });
   };
   
-  // 复制单个号码
-  const copyNumber = (number: string) => {
-    copyToClipboard(number);
+  // 复制单个邮箱
+  const copyEmail = (email: string) => {
+    copyToClipboard(email);
   };
   
-  // 复制所有号码
-  const copyAllNumbers = () => {
-    const allNumbers = collectionResults.map(item => item.number).join('\n');
-    copyToClipboard(allNumbers);
+  // 复制所有邮箱
+  const copyAllEmails = () => {
+    const allEmails = collectionResults.map(item => item.email).join('\n');
+    copyToClipboard(allEmails);
   };
   
   // 表格列配置
   const columns = [
     {
-      title: 'WhatsApp号码',
-      dataIndex: 'number',
-      key: 'number',
-      render: (number: string) => <strong>{number}</strong>,
+      title: 'E-mail地址',
+      dataIndex: 'email',
+      key: 'email',
+      render: (email: string) => <strong>{email}</strong>,
       ellipsis: true
     },
     {
@@ -479,12 +459,12 @@ const WhatsAppNumberCollection: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      render: (_: any, record: WhatsAppNumber) => (
+      render: (_: any, record: Email) => (
         <Space size="middle">
-          <Button 
-            type="text" 
-            icon={<CopyOutlined />} 
-            onClick={() => copyNumber(record.number)}
+          <Button
+            type="text"
+            icon={<CopyOutlined />}
+            onClick={() => copyEmail(record.email)}
           >
             复制
           </Button>
@@ -549,54 +529,35 @@ const WhatsAppNumberCollection: React.FC = () => {
   };
   
   return (
-    <div style={{ 
-      padding: '20px', 
-      backgroundColor: '#f0f2f5', 
+    <div style={{
+      padding: '20px',
+      backgroundColor: '#f0f2f5',
       minHeight: '100vh'
     }}>
-      <Title level={2} style={{ 
-        marginBottom: '20px', 
-        textAlign: 'center', 
-        color: '#1f2937' 
-      }}>WhatsApp号码采集器</Title>
+      <Title level={2} style={{
+        marginBottom: '20px',
+        textAlign: 'center',
+        color: '#1f2937'
+      }}>E-mail地址采集器</Title>
       
       <Spin spinning={loading} tip="加载中...">
-        <Tabs 
-          defaultActiveKey="1" 
+        <Tabs
+          defaultActiveKey="1"
           style={{ maxWidth: 1200, margin: '0 auto' }}
           tabBarStyle={{ marginBottom: '20px' }}
         >
           {/* 号码采集标签页 */}
-          <TabPane tab="号码采集" key="1">
+          <TabPane tab="邮箱采集" key="1">
             <Space direction="vertical" size="large" style={{ width: '100%' }}>
               {/* 采集配置卡片 */}
-              <Card 
-                style={{ 
+              <Card
+                style={{
                   boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
                   borderRadius: '8px'
                 }}
                 title={<span style={{ fontSize: '16px', fontWeight: 'bold' }}>采集配置</span>}
               >
                 <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                  {/* 地区选择 */}
-                  <div>
-                    <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>目标地区</div>
-                    <Select
-                      mode="multiple"
-                      placeholder="选择目标地区"
-                      value={selectedRegions}
-                      onChange={setSelectedRegions}
-                      style={{ width: '100%' }}
-                      maxTagCount={3}
-                    >
-                      {regions.map(region => (
-                        <Option key={region.value} value={region.value}>
-                          {region.label} ({region.code})
-                        </Option>
-                      ))}
-                    </Select>
-                  </div>
-
                   {/* 关键词输入 */}
                   <div>
                     <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>搜索关键词</div>
@@ -612,7 +573,7 @@ const WhatsAppNumberCollection: React.FC = () => {
                   {/* 采集来源选择 */}
                   <div>
                     <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>采集来源</div>
-                    <Checkbox.Group 
+                    <Checkbox.Group
                       options={websites.map(website => ({
                         label: website.label,
                         value: website.value
@@ -652,11 +613,11 @@ const WhatsAppNumberCollection: React.FC = () => {
 
                   {/* 操作按钮组 */}
                   <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                    <Button 
-                      type="primary" 
-                      onClick={handleStartCollection} 
-                      style={{ 
-                        width: '100%', 
+                    <Button
+                      type="primary"
+                      onClick={handleStartCollection}
+                      style={{
+                        width: '100%',
                         height: '48px',
                         fontSize: '16px',
                         fontWeight: 'bold',
@@ -669,10 +630,10 @@ const WhatsAppNumberCollection: React.FC = () => {
                     >
                       开始采集
                     </Button>
-                    <Button 
-                      onClick={clearStorageData} 
-                      style={{ 
-                        width: '100%', 
+                    <Button
+                      onClick={clearStorageData}
+                      style={{
+                        width: '100%',
                         height: '40px',
                         fontSize: '14px',
                         borderRadius: '4px'
@@ -686,8 +647,8 @@ const WhatsAppNumberCollection: React.FC = () => {
 
               {/* 采集状态和控制 */}
               {collectionStatus && (
-                <Card 
-                  style={{ 
+                <Card
+                  style={{
                     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
                     borderRadius: '8px'
                   }}
@@ -698,15 +659,15 @@ const WhatsAppNumberCollection: React.FC = () => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <Space>
                         <span style={{ fontSize: '14px', fontWeight: 'bold' }}>任务状态:</span>
-                        <Tag 
-                          color={getStatusColor(collectionStatus.status)} 
+                        <Tag
+                          color={getStatusColor(collectionStatus.status)}
                           icon={getStatusIcon(collectionStatus.status)}
                         >
                           {getStatusText(collectionStatus.status)}
                         </Tag>
                       </Space>
                       <Space>
-                        <Button 
+                        <Button
                           type="primary"
                           icon={<PlayCircleOutlined />}
                           onClick={handleResumeCollection}
@@ -714,14 +675,14 @@ const WhatsAppNumberCollection: React.FC = () => {
                         >
                           继续
                         </Button>
-                        <Button 
+                        <Button
                           icon={<PauseCircleOutlined />}
                           onClick={handlePauseCollection}
                           disabled={collectionStatus.status !== 'running'}
                         >
                           暂停
                         </Button>
-                        <Button 
+                        <Button
                           danger
                           icon={<StopOutlined />}
                           onClick={handleStopCollection}
@@ -740,21 +701,21 @@ const WhatsAppNumberCollection: React.FC = () => {
                           <span>总进度</span>
                           <span>{Math.round((collectionStatus.progress.currentPage / collectionStatus.progress.totalPages) * 100)}%</span>
                         </div>
-                        <Progress 
-                          percent={Math.round((collectionStatus.progress.currentPage / collectionStatus.progress.totalPages) * 100)} 
-                          status="active" 
+                        <Progress
+                          percent={Math.round((collectionStatus.progress.currentPage / collectionStatus.progress.totalPages) * 100)}
+                          status="active"
                         />
                       </div>
                       
                       <Row gutter={16}>
                         <Col span={12}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                            <span>已采集号码</span>
+                            <span>已采集邮箱</span>
                             <span>{collectionStatus.progress.collectedNumbers}</span>
                           </div>
-                          <Progress 
-                            percent={Math.round((collectionStatus.progress.collectedNumbers / (collectionStatus.progress.totalPages * 20)) * 100)} 
-                            status="active" 
+                          <Progress
+                            percent={Math.round((collectionStatus.progress.collectedNumbers / (collectionStatus.progress.totalPages * 20)) * 100)}
+                            status="active"
                             strokeColor="#52c41a"
                           />
                         </Col>
@@ -763,9 +724,9 @@ const WhatsAppNumberCollection: React.FC = () => {
                             <span>已处理来源</span>
                             <span>{collectionStatus.progress.processedSources}/{collectionStatus.progress.totalSources}</span>
                           </div>
-                          <Progress 
-                            percent={Math.round((collectionStatus.progress.processedSources / collectionStatus.progress.totalSources) * 100)} 
-                            status="active" 
+                          <Progress
+                            percent={Math.round((collectionStatus.progress.processedSources / collectionStatus.progress.totalSources) * 100)}
+                            status="active"
                             strokeColor="#1890ff"
                           />
                         </Col>
@@ -809,7 +770,7 @@ const WhatsAppNumberCollection: React.FC = () => {
                         <Button onClick={fetchCollectionLogs}>
                           查看日志
                         </Button>
-                        <Button 
+                        <Button
                           type="primary"
                           onClick={fetchCollectionResults}
                         >
@@ -823,8 +784,8 @@ const WhatsAppNumberCollection: React.FC = () => {
 
               {/* 采集结果 */}
               {collectionResults.length > 0 && (
-                <Card 
-                  style={{ 
+                <Card
+                  style={{
                     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
                     borderRadius: '8px'
                   }}
@@ -832,20 +793,20 @@ const WhatsAppNumberCollection: React.FC = () => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '16px', fontWeight: 'bold' }}>采集结果</span>
                       <Space>
-                        <Button 
+                        <Button
                           icon={<CopyOutlined />}
-                          onClick={copyAllNumbers}
+                          onClick={copyAllEmails}
                         >
-                          复制全部号码
+                          复制全部邮箱
                         </Button>
-                        <Button 
+                        <Button
                           icon={<DownloadOutlined />}
                           onClick={() => handleExportResults('excel')}
                           loading={exportLoading}
                         >
                           导出Excel
                         </Button>
-                        <Button 
+                        <Button
                           icon={<DownloadOutlined />}
                           onClick={() => handleExportResults('csv')}
                           loading={exportLoading}
@@ -882,8 +843,8 @@ const WhatsAppNumberCollection: React.FC = () => {
           
           {/* 使用说明标签页 */}
           <TabPane tab="使用说明" key="2">
-            <Card 
-              style={{ 
+            <Card
+              style={{
                 boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
                 borderRadius: '8px'
               }}
@@ -891,8 +852,8 @@ const WhatsAppNumberCollection: React.FC = () => {
               <Space direction="vertical" size="large" style={{ width: '100%' }}>
                 <Title level={3}>功能介绍</Title>
                 <Paragraph>
-                  WhatsApp号码采集器是一个用于自动从指定网站采集WhatsApp号码的工具。
-                  您可以通过设置目标地区、搜索关键词和采集来源，实现自动化的号码采集。
+                  E-mail地址采集器是一个用于自动从指定网站采集E-mail地址的工具。
+                  您可以通过设置目标地区、搜索关键词和采集来源，实现自动化的邮箱采集。
                 </Paragraph>
                 
                 <Title level={3}>使用步骤</Title>
@@ -920,8 +881,8 @@ const WhatsAppNumberCollection: React.FC = () => {
                   <div style={{ marginBottom: '16px' }}>
                     <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>3. 查看和导出结果</div>
                     <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                      <li>采集完成后，可以在"采集结果"中查看所有采集到的号码</li>
-                      <li>支持复制单个号码或全部号码到剪贴板</li>
+                      <li>采集完成后，可以在"采集结果"中查看所有采集到的邮箱</li>
+                      <li>支持复制单个邮箱或全部邮箱到剪贴板</li>
                       <li>支持导出为Excel或CSV格式</li>
                     </ul>
                   </div>
@@ -931,8 +892,9 @@ const WhatsAppNumberCollection: React.FC = () => {
                 <ul style={{ margin: 0, paddingLeft: '20px' }}>
                   <li>请遵守目标网站的 robots.txt 规则，合理设置采集间隔</li>
                   <li>不要过度采集同一网站，以免被封IP</li>
-                  <li>采集到的号码仅供合法用途，请勿用于 spam 等非法活动</li>
-                  <li>建议定期清理采集结果，只保留有用的号码</li>
+                  <li>采集到的邮箱仅供合法用途，请勿用于 spam 等非法活动</li>
+                  <li>系统会自动过滤国内邮箱，只保留国外邮箱</li>
+                  <li>建议定期清理采集结果，只保留有用的邮箱</li>
                 </ul>
                 
                 <Title level={3}>常见问题</Title>
@@ -948,8 +910,13 @@ const WhatsAppNumberCollection: React.FC = () => {
                   </div>
                   
                   <div style={{ marginBottom: '16px' }}>
-                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Q: 采集到的号码有重复怎么办？</div>
-                    <div>A: 系统会自动去重，重复的号码会被标记为"重复"，不会重复保存。</div>
+                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Q: 采集到的邮箱有重复怎么办？</div>
+                    <div>A: 系统会自动去重，重复的邮箱会被标记为"重复"，不会重复保存。</div>
+                  </div>
+                  
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Q: 为什么采集到的都是国外邮箱？</div>
+                    <div>A: 系统会自动过滤国内邮箱，只保留国外邮箱，以确保采集结果符合预期用途。</div>
                   </div>
                 </div>
               </Space>
@@ -983,4 +950,4 @@ const WhatsAppNumberCollection: React.FC = () => {
   );
 };
 
-export default WhatsAppNumberCollection;
+export default EmailCollection;

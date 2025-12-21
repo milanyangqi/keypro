@@ -60,6 +60,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
       onClick: () => navigate('/dashboard/email-management')
     },
     {
+      key: '10',
+      icon: <DatabaseOutlined />,
+      label: 'Email采集页面',
+      onClick: () => navigate('/dashboard/email-collection')
+    },
+    {
       key: '4',
       icon: <ClockCircleOutlined />,
       label: '美国各地时间',

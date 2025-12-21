@@ -137,7 +137,11 @@ export const getCollectionResults = async (taskId: string, params: {
   page?: number;
   limit?: number;
 }) => {
-  const response = await apiClient.get(`/whatsapp-collection/${taskId}/results`, { params });
+  let url = '/whatsapp-collection/results';
+  if (taskId && taskId !== '' && taskId !== 'undefined' && taskId !== 'null') {
+    url = `/whatsapp-collection/${taskId}/results`;
+  }
+  const response = await apiClient.get(url, { params });
   return response;
 };
 

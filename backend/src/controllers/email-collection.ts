@@ -1,7 +1,7 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import CollectionTask, { CollectionTaskStatus, ICollectionTask } from '../models/CollectionTask';
-import WhatsAppNumber from '../models/WhatsAppNumber';
+import Email from '../models/Email';
 import XLSX from 'xlsx';
 import fs from 'fs';
 import path from 'path';
@@ -216,6 +216,49 @@ const presetRegions = [
   { value: 'vanuatu', label: '瓦努阿图', code: '+678' },
   { value: 'samoa', label: '萨摩亚', code: '+685' },
 ];
+
+
+
+// 国内邮箱域名列表
+const domesticEmailDomains = [
+  'qq.com',
+  '163.com',
+  '126.com',
+  'sina.com',
+  'sohu.com',
+  '139.com',
+  'yeah.net',
+  'tom.com',
+  '263.net',
+  '189.cn',
+  'vip.163.com',
+  'vip.126.com',
+  'sina.cn',
+  'sina.com.cn',
+  'aliyun.com',
+  '163.net',
+  'gmail.cn',
+  'hotmail.cn',
+  'outlook.cn',
+];
+
+// E-mail格式验证正则表达式
+const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+// 检查是否为国内邮箱
+const isDomesticEmail = (email: string): boolean => {
+  try {
+    const domain = email.split('@')[1].toLowerCase();
+    return domesticEmailDomains.includes(domain);
+  } catch (error) {
+    return false;
+  }
+};
+
+// 验证E-mail格式
+const isValidEmail = (email: string): boolean => {
+  return emailRegex.test(email);
+};
 
 
 
@@ -598,50 +641,51 @@ export const getCollectionResults = async (req: express.Request, res: express.Re
   try {
     // 暂时使用admin用户的ID作为默认值，便于测试
     const userId = (req as any).user?.userId || '693ead0134c8e3d115e6387a';
-    const { taskId } = req.params;
+    // taskId可能不存在于params中（当使用/results路由时）
+    const taskId = req.params.taskId;
     const { page = 1, limit = 20 } = req.query;
     
     // 查询任务（可选，不强制要求存在）
     let task = null;
     
-    // 只在taskId是有效的ObjectId时才查询CollectionTask
+    // 只在taskId存在且是有效的ObjectId时才查询CollectionTask
     if (taskId && mongoose.isValidObjectId(taskId)) {
       task = await CollectionTask.findOne({ _id: taskId, creator: userId });
     }
     
-    // 即使没有找到任务，也继续执行，返回用户的WhatsApp数据
+    // 即使没有找到任务，也继续执行，返回用户的Email数据
     
     // 查询采集结果
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
     
-    let numbers;
+    let emails;
     let total;
     
-    // 如果taskId为空、无效或找不到对应的任务，返回该用户的所有WhatsApp数据
-    if (!taskId || taskId === '' || taskId === 'undefined' || taskId === 'null' || !mongoose.isValidObjectId(taskId) || !task) {
-      numbers = await WhatsAppNumber.find({ uploader: userId })
+    // 如果taskId为空或无效，直接返回该用户的所有Email数据
+    if (!taskId || taskId === '' || taskId === 'undefined' || taskId === 'null' || !mongoose.isValidObjectId(taskId)) {
+      emails = await Email.find({ uploader: userId })
         .skip(skip)
         .limit(parseInt(limit as string))
         .sort({ uploadTime: -1 });
       
-      total = await WhatsAppNumber.countDocuments({ uploader: userId });
+      total = await Email.countDocuments({ uploader: userId });
     } else {
       // 先根据taskId查询对应的采集结果
-      numbers = await WhatsAppNumber.find({ uploader: userId, taskId })
+      emails = await Email.find({ uploader: userId, taskId })
         .skip(skip)
         .limit(parseInt(limit as string))
         .sort({ uploadTime: -1 });
       
-      total = await WhatsAppNumber.countDocuments({ uploader: userId, taskId });
+      total = await Email.countDocuments({ uploader: userId, taskId });
       
-      // 如果没有找到对应taskId的结果，返回该用户的所有WhatsApp数据
+      // 如果没有找到对应taskId的结果，返回该用户的所有Email数据
       if (total === 0) {
-        numbers = await WhatsAppNumber.find({ uploader: userId })
+        emails = await Email.find({ uploader: userId })
           .skip(skip)
           .limit(parseInt(limit as string))
           .sort({ uploadTime: -1 });
         
-        total = await WhatsAppNumber.countDocuments({ uploader: userId });
+        total = await Email.countDocuments({ uploader: userId });
       }
     }
     
@@ -649,7 +693,7 @@ export const getCollectionResults = async (req: express.Request, res: express.Re
       status: 'success',
       message: 'Collection results retrieved successfully',
       data: {
-        numbers,
+        emails: emails,
         pagination: {
           total,
           page: parseInt(page as string),
@@ -738,19 +782,18 @@ export const exportResults = async (req: express.Request, res: express.Response)
     }
     
     // 查询采集结果
-    // 实际项目中，应该根据taskId查询对应的采集结果
-    // 这里使用模拟数据
-    const numbers = await WhatsAppNumber.find({ uploader: userId }).sort({ uploadTime: -1 });
+    // 根据taskId查询对应的采集结果
+    const emails = await Email.find({ uploader: userId, taskId }).sort({ uploadTime: -1 });
     
     // 转换为导出格式
-    const exportData = numbers.map(number => ({
-      '号码': number.number,
-      '行业': number.industry,
-      '关键词': number.keyword || '',
-      '来源平台': number.platform || '',
-      '上传时间': number.uploadTime.toISOString(),
-      '是否导出': number.exported ? '是' : '否',
-      '导出时间': number.exportTime ? number.exportTime.toISOString() : ''
+    const exportData = emails.map(email => ({
+      '邮箱': email.email,
+      '行业': email.industry,
+      '关键词': email.keyword || '',
+      '来源平台': email.platform || '',
+      '上传时间': email.uploadTime.toISOString(),
+      '是否导出': email.exported ? '是' : '否',
+      '导出时间': email.exportTime ? email.exportTime.toISOString() : ''
     }));
     
     // 创建工作簿
@@ -817,7 +860,7 @@ const simulateCollectionProcess = async (task: ICollectionTask) => {
     const isCompleted = newPage >= latestTask.progress.totalPages;
     
     // 模拟采集到的号码数量
-    const collectedInPage = Math.floor(Math.random() * 10) + 5; // 每次采集5-14个号码
+    const collectedInPage = Math.floor(Math.random() * 10) + 5; // 每次采集5-14个邮箱
     
     // 创建动态update对象，添加类型断言
     const update: any = {
@@ -825,11 +868,9 @@ const simulateCollectionProcess = async (task: ICollectionTask) => {
         'progress.currentPage': newPage,
         'progress.collectedNumbers': latestTask.progress.collectedNumbers + collectedInPage,
         'stats.total': latestTask.stats.total + collectedInPage,
-        'stats.success': latestTask.stats.success + Math.floor(collectedInPage * 0.8),
-        'stats.duplicate': latestTask.stats.duplicate + Math.floor(collectedInPage * 0.2),
       },
       $push: {
-        logs: [`已完成第 ${newPage} 页采集，新增 ${collectedInPage} 个号码 - ${new Date().toISOString()}`]
+        logs: [`已完成第 ${newPage} 页采集，新增 ${collectedInPage} 个邮箱 - ${new Date().toISOString()}`]
       }
     };
     
@@ -842,184 +883,60 @@ const simulateCollectionProcess = async (task: ICollectionTask) => {
     
     await CollectionTask.findByIdAndUpdate(task._id, update);
     
-    // 实际创建模拟的WhatsApp号码
+    // 实际创建模拟的E-mail
     try {
-      // 初始化统计变量
-      let successCount = 0;
-      let duplicateCount = 0;
-      let errorCount = 0;
-      let totalProcessed = 0;
-      
-      // 批量处理数组，减少数据库操作次数
-      const batchSize = 10;
-      const batch = [];
-      
-      // 根据采集到的数量创建相应的WhatsAppNumber文档
+      // 根据采集到的数量创建相应的Email文档
       for (let i = 0; i < collectedInPage; i++) {
-        totalProcessed++;
+        // 生成更符合真实邮箱格式的用户名
+        const firstName = Math.random().toString(36).substring(2, 6); // 名字部分
+        const lastName = Math.random().toString(36).substring(2, 7);  // 姓氏部分
+        const randomNum = Math.floor(Math.random() * 999);           // 可选的随机数字
         
+        // 真实邮箱常用格式：名字.姓氏，或名字姓氏，或名字姓氏+随机数字
+        const usernameFormats = [
+          `${firstName}${lastName}`,            // 名字姓氏
+          `${firstName}.${lastName}`,           // 名字.姓氏
+          `${firstName}${lastName}${randomNum}`, // 名字姓氏+随机数字
+          `${firstName}.${lastName}${randomNum}` // 名字.姓氏+随机数字
+        ];
+        
+        const selectedFormat = usernameFormats[Math.floor(Math.random() * usernameFormats.length)];
+        
+        // 生成随机域名，使用不会被过滤的真实域名
+        const safeDomains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'icloud.com', 'protonmail.com', 'aol.com', 'zoho.com', 'yandex.com', 'mail.com'];
+        const domain = safeDomains[Math.floor(Math.random() * safeDomains.length)];
+        
+        // 生成符合标准格式的邮箱地址
+        const email = `${selectedFormat.toLowerCase()}@${domain}`;
+        
+        // 从任务配置中随机选择一个行业
+        const industries = ['服装', '电子', '机械', '化工', '食品', '科技', '金融', '医疗', '教育', '物流'];
+        const industry = industries[Math.floor(Math.random() * industries.length)];
+        
+        // 从任务配置中随机选择一个来源
+        const source = latestTask.config.sources[Math.floor(Math.random() * latestTask.config.sources.length)];
+        
+        // 创建Email文档
+        const newEmail = new Email({
+          email,
+          industry,
+          keyword: latestTask.config.keywords[Math.floor(Math.random() * latestTask.config.keywords.length)],
+          platform: source,
+          uploader: latestTask.creator,
+          uploadTime: new Date(),
+          taskId: task._id
+        });
+        
+        // 保存到数据库，即使出现错误也继续执行
         try {
-          // 生成模拟的WhatsApp号码
-          let number: string;
-          // 根据地区生成不同格式的号码
-          if (latestTask.config.regions.includes('usa') || latestTask.config.regions.includes('all')) {
-            // 美国号码格式: +1XXXYYYZZZZ
-            const areaCode = Math.floor(Math.random() * 900) + 100; // 100-999
-            const prefix = Math.floor(Math.random() * 900) + 100; // 100-999
-            const lineNumber = Math.floor(Math.random() * 9000) + 1000; // 1000-9999
-            number = `+1${areaCode}${prefix}${lineNumber}`;
-          } else if (latestTask.config.regions.includes('china')) {
-            // 中国号码格式: +861XXXXXXXXXX
-            number = `+861${Math.floor(Math.random() * 9000000000) + 1000000000}`;
-          } else if (latestTask.config.regions.includes('uk')) {
-            // 英国号码格式: +447XXXYYYYYY
-            number = `+447${Math.floor(Math.random() * 900000000) + 100000000}`;
-          } else {
-            // 其他地区默认格式
-            const countryCode = ['+49', '+33', '+39', '+34', '+81', '+82', '+91'][Math.floor(Math.random() * 7)];
-            const localNumber = Math.floor(Math.random() * 900000000) + 100000000;
-            number = `${countryCode}${localNumber}`;
-          }
-          
-          // 数据清洗和标准化处理
-          const normalizedNumber = number
-            .trim()
-            .replace(/\s+/g, '') // 移除空格
-            .replace(/\-|\(|\)/g, '') // 移除特殊字符
-            .replace(/^0+/, ''); // 移除开头的多个0
-          
-          // 更严格的号码格式验证
-          const phoneRegex = /^\+[1-9]\d{1,14}$/;
-          if (!phoneRegex.test(normalizedNumber)) {
-            errorCount++;
-            update.$push.logs.push(`号码格式无效：${normalizedNumber} - ${new Date().toISOString()}`);
-            continue;
-          }
-          
-          // 从任务配置中随机选择一个行业
-          const industries = ['服装', '电子', '机械', '化工', '食品', '科技', '金融', '医疗', '教育', '物流'];
-          const industry = industries[Math.floor(Math.random() * industries.length)];
-          
-          // 从任务配置中随机选择一个来源
-          const source = latestTask.config.sources[Math.floor(Math.random() * latestTask.config.sources.length)];
-          
-          // 检查号码是否已存在（额外的去重验证）
-          const existingNumber = await WhatsAppNumber.findOne({ number: normalizedNumber });
-          if (existingNumber) {
-            duplicateCount++;
-            // 记录重复日志
-            update.$push.logs.push(`号码 ${normalizedNumber} 已存在，跳过存储 - ${new Date().toISOString()}`);
-            continue;
-          }
-          
-          // 创建WhatsAppNumber文档
-          const whatsappNumber = new WhatsAppNumber({
-            number: normalizedNumber,
-            industry,
-            keyword: latestTask.config.keywords[Math.floor(Math.random() * latestTask.config.keywords.length)],
-            platform: source,
-            uploader: latestTask.creator,
-            uploadTime: new Date(),
-            taskId: task._id
-          });
-          
-          // 添加到批量数组
-          batch.push(whatsappNumber);
-          
-          // 当批量数组达到指定大小时，执行批量保存
-          if (batch.length >= batchSize) {
-            let insertSuccess = false;
-            let insertAttempts = 0;
-            const maxInsertAttempts = 3;
-            
-            // 批量插入重试机制
-            while (!insertSuccess && insertAttempts < maxInsertAttempts) {
-              try {
-                // 检查数据库连接状态
-                if (mongoose.connection.readyState !== 1) {
-                  throw new Error('Database connection is not ready');
-                }
-                
-                await WhatsAppNumber.insertMany(batch, {
-                  ordered: false // 无序插入，提高性能
-                });
-                
-                successCount += batch.length;
-                update.$push.logs.push(`批量保存 ${batch.length} 个号码成功 - ${new Date().toISOString()}`);
-                batch.length = 0; // 清空批量数组
-                insertSuccess = true;
-              } catch (insertError: any) {
-                insertAttempts++;
-                errorCount++;
-                const errorMessage = `批量保存失败 (尝试 ${insertAttempts}/${maxInsertAttempts}): ${insertError.message}`;
-                update.$push.logs.push(`${errorMessage} - ${new Date().toISOString()}`);
-                console.error(errorMessage, insertError);
-                
-                // 指数退避重试
-                if (insertAttempts < maxInsertAttempts) {
-                  const retryDelay = Math.pow(2, insertAttempts) * 1000;
-                  await new Promise(resolve => setTimeout(resolve, retryDelay));
-                }
-              }
-            }
-          }
-          
+          await newEmail.save();
         } catch (saveError: any) {
-          errorCount++;
-          update.$push.logs.push(`保存号码失败：${saveError.message} - ${new Date().toISOString()}`);
-          console.error(`Error saving WhatsApp number:`, saveError);
+          // 记录错误但不中断循环
+          console.error(`Failed to save email ${email}:`, saveError.message);
         }
       }
-      
-      // 保存剩余的批量数据
-      if (batch.length > 0) {
-        let insertSuccess = false;
-        let insertAttempts = 0;
-        const maxInsertAttempts = 3;
-        
-        // 剩余批量数据插入重试机制
-        while (!insertSuccess && insertAttempts < maxInsertAttempts) {
-          try {
-            // 检查数据库连接状态
-            if (mongoose.connection.readyState !== 1) {
-              throw new Error('Database connection is not ready');
-            }
-            
-            await WhatsAppNumber.insertMany(batch, {
-              ordered: false
-            });
-            
-            successCount += batch.length;
-            update.$push.logs.push(`批量保存剩余 ${batch.length} 个号码成功 - ${new Date().toISOString()}`);
-            batch.length = 0;
-            insertSuccess = true;
-          } catch (insertError: any) {
-            insertAttempts++;
-            errorCount++;
-            const errorMessage = `保存剩余批量数据失败 (尝试 ${insertAttempts}/${maxInsertAttempts}): ${insertError.message}`;
-            update.$push.logs.push(`${errorMessage} - ${new Date().toISOString()}`);
-            console.error(errorMessage, insertError);
-            
-            // 指数退避重试
-            if (insertAttempts < maxInsertAttempts) {
-              const retryDelay = Math.pow(2, insertAttempts) * 1000;
-              await new Promise(resolve => setTimeout(resolve, retryDelay));
-            }
-          }
-        }
-      }
-      
-      // 更新任务统计信息
-      update.$set['stats.success'] = latestTask.stats.success + successCount;
-      update.$set['stats.duplicate'] = latestTask.stats.duplicate + duplicateCount;
-      update.$set['stats.failed'] = latestTask.stats.failed + errorCount;
-      
-      // 记录完整的存储日志
-      update.$push.logs.push(`本次采集完成：共处理 ${totalProcessed} 个号码，成功 ${successCount} 个，重复 ${duplicateCount} 个，失败 ${errorCount} 个 - ${new Date().toISOString()}`);
-      
-    } catch (error: any) {
-      console.error('Error in WhatsApp number collection process:', error);
-      update.$push.logs.push(`采集过程出错：${error.message} - ${new Date().toISOString()}`);
+    } catch (error) {
+      console.error('Error creating simulated emails:', error);
     }
     
     if (isCompleted) {

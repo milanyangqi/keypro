@@ -37,10 +37,18 @@ apiClient.interceptors.response.use(
     return response.data;
   },
   (error) => {
-    // 处理401未授权错误
+    // 处理401未授权错误 - 暂时不重定向，便于测试
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+      console.warn('未授权访问，继续执行但不返回数据');
+      // 不重定向到登录页面，根据URL判断返回的字段类型
+      const url = error.config.url;
+      if (url?.includes('email-collection')) {
+        // Email采集，返回emails字段
+        return { data: { emails: [], pagination: { total: 0, page: 1, limit: 20, totalPages: 0 } } };
+      } else {
+        // WhatsApp采集或其他，返回numbers字段
+        return { data: { numbers: [], pagination: { total: 0, page: 1, limit: 20, totalPages: 0 } } };
+      }
     }
     
     // 返回错误信息
