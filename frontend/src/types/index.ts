@@ -28,6 +28,9 @@ export interface WhatsAppNumber {
   _id: string;
   number: string;
   industry: string;
+  keyword?: string;
+  syntax?: string;
+  platform?: string;
   uploader: string | User;
   uploadTime: string;
   createdAt: string;
@@ -39,6 +42,9 @@ export interface Email {
   _id: string;
   email: string;
   industry: string;
+  keyword?: string;
+  syntax?: string;
+  platform?: string;
   uploader: string | User;
   uploadTime: string;
   createdAt: string;

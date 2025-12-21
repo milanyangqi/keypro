@@ -3,10 +3,19 @@ import axios from 'axios';
 import { Email, EmailMatchResult, Stats } from '../types';
 
 // 上传邮箱
-export const uploadEmails = async (industry: string, file: File): Promise<any> => {
+export const uploadEmails = async (industry: string, file: File, keyword?: string, syntax?: string, platform?: string): Promise<any> => {
   const formData = new FormData();
   formData.append('industry', industry);
   formData.append('file', file);
+  if (keyword) {
+    formData.append('keyword', keyword);
+  }
+  if (syntax) {
+    formData.append('syntax', syntax);
+  }
+  if (platform) {
+    formData.append('platform', platform);
+  }
   
   const response = await apiClient.post('/email/upload', formData, {
     headers: {

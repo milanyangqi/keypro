@@ -4,6 +4,9 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface IWhatsAppNumber extends Document {
   number: string;
   industry: string;
+  keyword?: string;
+  syntax?: string;
+  platform?: string;
   uploader: mongoose.Types.ObjectId;
   uploadTime: Date;
   createdAt: Date;
@@ -21,6 +24,18 @@ const WhatsAppNumberSchema: Schema = new Schema({
   industry: {
     type: String,
     required: true,
+    trim: true
+  },
+  keyword: {
+    type: String,
+    trim: true
+  },
+  syntax: {
+    type: String,
+    trim: true
+  },
+  platform: {
+    type: String,
     trim: true
   },
   uploader: {

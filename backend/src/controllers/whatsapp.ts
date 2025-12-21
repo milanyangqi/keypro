@@ -41,7 +41,7 @@ const parseNumbersFromFile = (filePath: string, fileExt: string): string[] => {
 export const uploadNumbers = async (req: express.Request, res: express.Response) => {
   try {
     const userId = (req as any).user?.userId;
-    const { industry } = req.body;
+    const { industry, keyword, syntax, platform } = req.body;
     
     if (!userId) {
       return res.status(401).json({
@@ -113,6 +113,9 @@ export const uploadNumbers = async (req: express.Request, res: express.Response)
           const whatsappNumber = new WhatsAppNumber({
             number,
             industry: industry.trim(),
+            keyword: keyword?.trim(),
+            syntax: syntax?.trim(),
+            platform: platform?.trim(),
             uploader: userId,
             uploadTime
           });

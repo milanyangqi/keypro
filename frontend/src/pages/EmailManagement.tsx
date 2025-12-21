@@ -49,6 +49,24 @@ const EmailManagement: React.FC = () => {
   const [emailsText, setEmailsText] = useState('');
   const [matchResult, setMatchResult] = useState<EmailMatchResult | null>(null);
   const [matching, setMatching] = useState(false);
+  // 平台选项，移除了全球搜索引擎
+  const platformOptions = [
+    'Google', 'Bing', 'Yahoo', 'Facebook', 'LinkedIn', 'TikTok', 'Instagram',
+    'Twitter', 'Pinterest', 'YouTube', 'Reddit', 'Quora', 'Amazon', 'AliExpress', '其他'
+  ];
+  
+  // 自定义平台输入状态
+  const [showCustomPlatform, setShowCustomPlatform] = useState(false);
+  const [customPlatform, setCustomPlatform] = useState('');
+  // 表格筛选状态
+  const [filteredInfo, setFilteredInfo] = useState<{
+    [key: string]: any;
+  }>({});
+  
+  // 处理表格筛选和排序
+  const handleTableChange = (_pagination: any, filters: any, _sorter: any) => {
+    setFilteredInfo(filters);
+  };
   // 复制邮箱到剪贴板
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
@@ -209,6 +227,15 @@ const EmailManagement: React.FC = () => {
         return;
       }
 
+      // 获取表单字段
+      const keyword = form.getFieldValue('keyword');
+      const syntax = form.getFieldValue('syntax');
+      let platform = form.getFieldValue('platform');
+      // 如果选择了其他，使用自定义平台值
+      if (showCustomPlatform && customPlatform) {
+        platform = customPlatform;
+      }
+
       // 先匹配邮箱，获取已存在和新增的邮箱
       const matchResult = await matchEmails(emailsArray);
       setMatchResult(matchResult);
@@ -217,7 +244,7 @@ const EmailManagement: React.FC = () => {
       // 然后将所有邮箱上传到数据库，后端会自动处理重复邮箱
       const blob = new Blob([emailsArray.join('\n')], { type: 'text/plain' });
       const file = new File([blob], 'emails.txt', { type: 'text/plain' });
-      const uploadResult = await uploadEmails(industry, file);
+      const uploadResult = await uploadEmails(industry, file, keyword, syntax, platform);
       setUploadResult(uploadResult);
       loadEmails(); // 重新加载邮箱列表
     } catch (error: any) {
@@ -267,7 +294,65 @@ const EmailManagement: React.FC = () => {
       title: '行业',
       dataIndex: 'industry',
       key: 'industry',
-      ellipsis: true
+      ellipsis: true,
+      filters: [
+        { text: '全部', value: '全部' },
+        { text: '电子', value: '电子' },
+        { text: '机械', value: '机械' },
+        { text: '化工', value: '化工' },
+        { text: '纺织', value: '纺织' },
+        { text: '服装', value: '服装' },
+        { text: '食品', value: '食品' },
+        { text: '医药', value: '医药' },
+        { text: '能源', value: '能源' },
+        { text: '建筑', value: '建筑' },
+        { text: '餐饮', value: '餐饮' },
+        { text: '其他', value: '其他' }
+      ],
+      filteredValue: filteredInfo.industry || null,
+      onFilter: (value: any, record: Email) => {
+        if (value === '全部') return true;
+        return record.industry === value;
+      }
+    },
+    {
+      title: '关键词',
+      dataIndex: 'keyword',
+      key: 'keyword',
+      ellipsis: true,
+      // 动态生成关键词筛选选项
+      filters: Array.from(new Set(emails.map(email => email.keyword).filter(Boolean))).map(keyword => ({
+        text: keyword as string,
+        value: keyword as string
+      })),
+      filteredValue: filteredInfo.keyword || null,
+      onFilter: (value: any, record: Email) => record.keyword === value
+    },
+    {
+      title: '语法',
+      dataIndex: 'syntax',
+      key: 'syntax',
+      ellipsis: true,
+      // 动态生成语法筛选选项
+      filters: Array.from(new Set(emails.map(email => email.syntax).filter(Boolean))).map(syntax => ({
+        text: syntax as string,
+        value: syntax as string
+      })),
+      filteredValue: filteredInfo.syntax || null,
+      onFilter: (value: any, record: Email) => record.syntax === value
+    },
+    {
+      title: '平台',
+      dataIndex: 'platform',
+      key: 'platform',
+      ellipsis: true,
+      // 动态生成平台筛选选项
+      filters: Array.from(new Set(emails.map(email => email.platform).filter(Boolean))).map(platform => ({
+        text: platform as string,
+        value: platform as string
+      })),
+      filteredValue: filteredInfo.platform || null,
+      onFilter: (value: any, record: Email) => record.platform === value
     },
     {
       title: '上传者',
@@ -279,6 +364,19 @@ const EmailManagement: React.FC = () => {
           return uploader;
         }
         return uploader.username || uploader.email;
+      },
+      // 动态生成上传者筛选选项
+      filters: Array.from(new Set(emails.map(email => {
+        const uploaderName = typeof email.uploader === 'string' ? email.uploader : email.uploader?.username || email.uploader?.email;
+        return uploaderName || '';
+      }).filter(Boolean))).map(uploader => ({
+        text: uploader as string,
+        value: uploader as string
+      })),
+      filteredValue: filteredInfo.uploader || null,
+      onFilter: (value: any, record: Email) => {
+        const uploaderName = typeof record.uploader === 'string' ? record.uploader : record.uploader?.username || record.uploader?.email;
+        return uploaderName === value;
       }
     },
     {
@@ -341,7 +439,7 @@ const EmailManagement: React.FC = () => {
               onFinish={handleFileUpload}
             >
               <Row gutter={[16, 16]}>
-                <Col span={8}>
+                <Col span={24}>
                   <Form.Item
                     name="industry"
                     label="行业分类"
@@ -367,6 +465,63 @@ const EmailManagement: React.FC = () => {
                     </Select>
                   </Form.Item>
                 </Col>
+                <Col span={24}>
+                  <Form.Item
+                    name="keyword"
+                    label="关键词"
+                  >
+                    <Input placeholder="请输入关键词（非必填）" />
+                  </Form.Item>
+                </Col>
+                <Col span={24}>
+                  <Form.Item
+                    name="syntax"
+                    label="语法"
+                  >
+                    <Input placeholder="请输入语法（非必填）" />
+                  </Form.Item>
+                </Col>
+                <Col span={24}>
+                  <Form.Item
+                    name="platform"
+                    label="平台"
+                  >
+                    <Select 
+                      placeholder="请选择平台（非必填）"
+                      onChange={(value) => {
+                        setShowCustomPlatform(value === '其他');
+                        if (value === '其他') {
+                          // 清空平台值，使用自定义值
+                          form.setFieldValue('platform', '');
+                        } else {
+                          setCustomPlatform('');
+                        }
+                      }}
+                    >
+                      {platformOptions.map(platform => (
+                        <Option key={platform} value={platform}>{platform}</Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                </Col>
+                {/* 自定义平台输入 */}
+                {showCustomPlatform && (
+                  <Col span={24}>
+                    <Form.Item
+                      label="自定义平台"
+                      help="请输入自定义平台名称"
+                    >
+                      <Input 
+                        placeholder="请输入自定义平台"
+                        value={customPlatform}
+                        onChange={(e) => {
+                          setCustomPlatform(e.target.value);
+                          form.setFieldValue('platform', e.target.value);
+                        }}
+                      />
+                    </Form.Item>
+                  </Col>
+                )}
               </Row>
 
               <Form.Item
@@ -574,6 +729,7 @@ const EmailManagement: React.FC = () => {
               loading={loading}
               pagination={paginationConfig}
               bordered
+              onChange={handleTableChange}
             />
           </TabPane>
         </Tabs>

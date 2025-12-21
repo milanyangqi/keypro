@@ -37,6 +37,12 @@ const industryOptions = [
   '建筑', '金融', 'IT', '物流', '教育', '旅游', '餐饮', '其他'
 ];
 
+// 平台选项
+const platformOptions = [
+  'Google', 'Bing', 'Yahoo', 'Facebook', 'LinkedIn', 'TikTok', 'Instagram',
+  'Twitter', 'Pinterest', 'YouTube', 'Reddit', 'Quora', 'Amazon', 'AliExpress', '其他'
+];
+
 const WhatsAppNumberManagement: React.FC = () => {
   const [form] = Form.useForm();
   const [numbersText, setNumbersText] = useState<string>('');
@@ -48,11 +54,20 @@ const WhatsAppNumberManagement: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(500);
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
-  // 默认选择最近6个月日期，避免只查询当天导致没有结果
-  const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([
-    dayjs().subtract(6, 'month'),
-    dayjs()
-  ]);
+  // 默认显示所有数据，不限制日期范围
+  const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([null, null]);
+  // 自定义平台输入状态
+  const [showCustomPlatform, setShowCustomPlatform] = useState(false);
+  const [customPlatform, setCustomPlatform] = useState('');
+  // 表格筛选状态
+  const [filteredInfo, setFilteredInfo] = useState<{
+    [key: string]: any;
+  }>({});
+  
+  // 处理表格筛选和排序
+  const handleTableChange = (_pagination: any, filters: any, _sorter: any) => {
+    setFilteredInfo(filters);
+  };
 
   // 初始化表单默认值
   useEffect(() => {
@@ -112,13 +127,17 @@ const WhatsAppNumberManagement: React.FC = () => {
     setLoading(true);
     try {
       const selectedIndustry = form.getFieldValue('industry');
+      const keyword = form.getFieldValue('keyword');
+      const syntax = form.getFieldValue('syntax');
+      const platform = form.getFieldValue('platform');
+      
       if (!selectedIndustry) {
         message.error('请选择或输入行业！');
         return false;
       }
       
       // 上传文件
-      const response = await uploadNumbers(file, selectedIndustry);
+      const response = await uploadNumbers(file, selectedIndustry, keyword, syntax, platform);
       if (response.status === 'success') {
         // 直接使用上传返回的匹配结果
         const matchRes = {
@@ -157,6 +176,10 @@ const WhatsAppNumberManagement: React.FC = () => {
     setLoading(true);
     try {
       const selectedIndustry = form.getFieldValue('industry');
+      const keyword = form.getFieldValue('keyword');
+      const syntax = form.getFieldValue('syntax');
+      const platform = form.getFieldValue('platform');
+      
       if (!selectedIndustry) {
         message.error('请选择或输入行业！');
         return;
@@ -188,8 +211,8 @@ const WhatsAppNumberManagement: React.FC = () => {
         const tempFile = new Blob([tempText], { type: 'text/plain' });
         const file = new File([tempFile], 'temp-numbers.txt', { type: 'text/plain' });
         
-        // 上传新号码
-        await uploadNumbers(file, selectedIndustry);
+        // 上传新号码，传递所有字段
+        await uploadNumbers(file, selectedIndustry, keyword, syntax, platform);
       }
       
       setMatchResult(matchRes);
@@ -368,13 +391,83 @@ const WhatsAppNumberManagement: React.FC = () => {
       width: 150,
       render: (_: any, record: WhatsAppNumber) => {
         return countryCodeToName(record.number);
-      }
+      },
+      // 动态生成国家筛选选项
+      filters: Array.from(new Set(numbers.map(number => countryCodeToName(number.number)))).map(country => ({
+        text: country as string,
+        value: country as string
+      })),
+      filteredValue: filteredInfo.country || null,
+      onFilter: (value: any, record: WhatsAppNumber) => countryCodeToName(record.number) === value
     },
     {
       title: '行业',
       dataIndex: 'industry',
       key: 'industry',
-      width: 150
+      width: 150,
+      filters: [
+        { text: '全部', value: '全部' },
+        { text: '电子', value: '电子' },
+        { text: '服装', value: '服装' },
+        { text: '机械', value: '机械' },
+        { text: '化工', value: '化工' },
+        { text: '食品', value: '食品' },
+        { text: '医药', value: '医药' },
+        { text: '汽车', value: '汽车' },
+        { text: '能源', value: '能源' },
+        { text: '建筑', value: '建筑' },
+        { text: '金融', value: '金融' },
+        { text: 'IT', value: 'IT' },
+        { text: '物流', value: '物流' },
+        { text: '教育', value: '教育' },
+        { text: '旅游', value: '旅游' },
+        { text: '餐饮', value: '餐饮' },
+        { text: '其他', value: '其他' }
+      ],
+      filteredValue: filteredInfo.industry || null,
+      onFilter: (value: any, record: WhatsAppNumber) => {
+        if (value === '全部') return true;
+        return record.industry === value;
+      }
+    },
+    {
+      title: '关键词',
+      dataIndex: 'keyword',
+      key: 'keyword',
+      width: 150,
+      // 动态生成关键词筛选选项
+      filters: Array.from(new Set(numbers.map(number => number.keyword).filter(Boolean))).map(keyword => ({
+        text: keyword as string,
+        value: keyword as string
+      })),
+      filteredValue: filteredInfo.keyword || null,
+      onFilter: (value: any, record: WhatsAppNumber) => record.keyword === value
+    },
+    {
+      title: '语法',
+      dataIndex: 'syntax',
+      key: 'syntax',
+      width: 150,
+      // 动态生成语法筛选选项
+      filters: Array.from(new Set(numbers.map(number => number.syntax).filter(Boolean))).map(syntax => ({
+        text: syntax as string,
+        value: syntax as string
+      })),
+      filteredValue: filteredInfo.syntax || null,
+      onFilter: (value: any, record: WhatsAppNumber) => record.syntax === value
+    },
+    {
+      title: '平台',
+      dataIndex: 'platform',
+      key: 'platform',
+      width: 150,
+      // 动态生成平台筛选选项
+      filters: Array.from(new Set(numbers.map(number => number.platform).filter(Boolean))).map(platform => ({
+        text: platform as string,
+        value: platform as string
+      })),
+      filteredValue: filteredInfo.platform || null,
+      onFilter: (value: any, record: WhatsAppNumber) => record.platform === value
     },
     {
       title: '上传时间',
@@ -388,7 +481,20 @@ const WhatsAppNumberManagement: React.FC = () => {
       dataIndex: 'uploader',
       key: 'uploader',
       width: 150,
-      render: (uploader: any) => uploader?.username || uploader
+      render: (uploader: any) => uploader?.username || uploader,
+      // 动态生成上传者筛选选项
+      filters: Array.from(new Set(numbers.map(number => {
+        const uploaderName = typeof number.uploader === 'string' ? number.uploader : number.uploader?.username;
+        return uploaderName || '';
+      }).filter(Boolean))).map(uploader => ({
+        text: uploader as string,
+        value: uploader as string
+      })),
+      filteredValue: filteredInfo.uploader || null,
+      onFilter: (value: any, record: WhatsAppNumber) => {
+        const uploaderName = typeof record.uploader === 'string' ? record.uploader : record.uploader?.username;
+        return uploaderName === value;
+      }
     },
     {
       title: '操作',
@@ -444,6 +550,57 @@ const WhatsAppNumberManagement: React.FC = () => {
                     </Select>
                   </Form.Item>
                 </Col>
+                
+                <Col span={24}>
+                  <Form.Item label="关键词" name="keyword">
+                    <Input placeholder="请输入关键词（非必填）" />
+                  </Form.Item>
+                </Col>
+                
+                <Col span={24}>
+                  <Form.Item label="语法" name="syntax">
+                    <Input placeholder="请输入语法（非必填）" />
+                  </Form.Item>
+                </Col>
+                
+                <Col span={24}>
+                  <Form.Item label="平台" name="platform">
+                    <Select 
+                      placeholder="请选择平台（非必填）"
+                      onChange={(value) => {
+                        setShowCustomPlatform(value === '其他');
+                        if (value === '其他') {
+                          // 清空平台值，使用自定义值
+                          form.setFieldValue('platform', '');
+                        } else {
+                          setCustomPlatform('');
+                        }
+                      }}
+                    >
+                      {platformOptions.map(platform => (
+                        <Option key={platform} value={platform}>{platform}</Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                </Col>
+                {/* 自定义平台输入 */}
+                {showCustomPlatform && (
+                  <Col span={24}>
+                    <Form.Item
+                      label="自定义平台"
+                      help="请输入自定义平台名称"
+                    >
+                      <Input 
+                        placeholder="请输入自定义平台"
+                        value={customPlatform}
+                        onChange={(e) => {
+                          setCustomPlatform(e.target.value);
+                          form.setFieldValue('platform', e.target.value);
+                        }}
+                      />
+                    </Form.Item>
+                  </Col>
+                )}
                 
                 <Col span={24}>
                   <Form.Item label="号码输入（一行一个）">
@@ -619,6 +776,15 @@ const WhatsAppNumberManagement: React.FC = () => {
                 >
                   搜索
                 </Button>
+                <Button
+                  style={{ marginLeft: 8 }}
+                  onClick={() => {
+                    form.resetFields();
+                    setDateRange([dayjs().subtract(6, 'month'), dayjs()]);
+                  }}
+                >
+                  重置
+                </Button>
               </Form.Item>
             </Form>
             
@@ -640,6 +806,7 @@ const WhatsAppNumberManagement: React.FC = () => {
               rowKey="_id"
               rowSelection={rowSelection}
               loading={queryLoading}
+              onChange={handleTableChange}
               pagination={{
                 total,
                 current: currentPage,

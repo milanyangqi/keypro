@@ -2,10 +2,19 @@ import apiClient from '../utils/apiClient';
 import { WhatsAppMatchResult, Stats } from '../types';
 
 // 上传WhatsApp号码
-export const uploadNumbers = async (file: File, industry: string) => {
+export const uploadNumbers = async (file: File, industry: string, keyword?: string, syntax?: string, platform?: string) => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('industry', industry);
+  if (keyword) {
+    formData.append('keyword', keyword);
+  }
+  if (syntax) {
+    formData.append('syntax', syntax);
+  }
+  if (platform) {
+    formData.append('platform', platform);
+  }
   
   const response = await apiClient.post('/whatsapp/upload', formData, {
     headers: {
